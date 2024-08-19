@@ -498,6 +498,14 @@ search.facet(:author_id).rows.each do |facet|
 end
 ```
 
+You can also filter facets using a regular expression. Requires Solr 7.7 or higher for `facet.matches` faceting support.
+```ruby
+# Posts that insensitive case match 'Lord' followed by 'Rings' anywhere in the post title
+search = Post.search do
+  facet :title, matches: '(?i)Lord.*Rings'
+end
+```
+
 #### Query Facets
 
 ```ruby
@@ -1121,7 +1129,7 @@ node contains replicas of all shards in the cluster. If you have 4 shards on sep
 nodes each of these nodes should have 4 replicas (one replica of each shard).
 
 More information and usage examples could be found here:
-https://lucene.apache.org/solr/guide/6_6/shards-and-indexing-data-in-solrcloud.html  
+https://lucene.apache.org/solr/guide/6_6/shards-and-indexing-data-in-solrcloud.html
 
 ### Highlighting
 

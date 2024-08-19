@@ -124,6 +124,14 @@ describe 'search faceting' do
       expect(search.facet(:title).rows.map { |row| row.value }.sort).to eq(%w(three two))
     end
 
+    it 'should limit facet values by regex match' do
+      search = Sunspot.search(Post) do
+        with :blog_id, 1
+        facet :title, :matches => 'o.+[aeiou]'
+      end
+      expect(search.facet(:title).rows.map { |row| row.value }.sort).to eq(%w(one four))
+    end
+
     it 'should return :all facet' do
       search = Sunspot.search(Post) do
         with :blog_id, 1
