@@ -34,7 +34,7 @@ shared_examples_for "scoped query" do
       'expire_date_d:1983\-07\-08T00\:00\:00Z'
     )
   end
-  
+
   it 'scopes by exact match with boolean' do
     search do
       with :featured, false
@@ -61,6 +61,13 @@ shared_examples_for "scoped query" do
       with(:average_rating).greater_than 3.0
     end
     expect(connection).to have_last_search_including(:fq, 'average_rating_ft:{3\.0 TO *}')
+  end
+
+  it 'scopes by between match with excluded end float range' do
+    search do
+      with(:average_rating).between 2.0...3.0
+    end
+    expect(connection).to have_last_search_including(:fq, 'average_rating_ft:[2\.0 TO 3\.0}')
   end
 
   it 'scopes by short-form between match with integers' do
@@ -125,7 +132,7 @@ shared_examples_for "scoped query" do
     end
     expect(connection).to have_last_search_including(:fq, '-average_rating_ft:{3\.0 TO *}')
   end
-  
+
   it 'scopes by not between match with shorthand' do
     search do
       without(:blog_id, 2..4)
