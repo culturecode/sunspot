@@ -13,6 +13,7 @@ module Sunspot
         @dynamic_field_factories_cache = *Array.new(6) { Hash.new }
       @stored_field_factories_cache = Hash.new { |h, k| h[k] = [] }
       @more_like_this_field_factories_cache = Hash.new { |h, k| h[k] = [] }
+      @nested_setups = {}
       @dsl = DSL::Fields.new(self)
       @document_boost_extractor = nil
       @id_prefix_extractor = nil
@@ -48,6 +49,33 @@ module Sunspot
       else
         @field_factories_cache[field_factory.name] = field_factory
       end
+    end
+
+    #
+    # Declares an association whose records are indexed as child documents of
+    # this class's documents. Returns the NestedSetup the block's fields are
+    # added to.
+    #
+    def add_nested(name, options = {}, &block)
+      nested_setup = NestedSetup.new(self, name, options)
+      nested_setup.setup(&block) if block
+      @nested_setups[nested_setup.name] = nested_setup
+    end
+
+    #
+    # Returns the NestedSetup for the given association, including
+    # associations declared on a superclass. Raises UnrecognizedFieldError when
+    # no such association is declared.
+    #
+    def nested_setup(name)
+      get_inheritable_hash(:nested_setups)[name.to_sym] || raise(
+        UnrecognizedFieldError,
+        "No nested association configured for #{@class_name} with name '#{name}'"
+      )
+    end
+
+    def nested_setups
+      collection_from_inheritable_hash(:nested_setups)
     end
 
     # 

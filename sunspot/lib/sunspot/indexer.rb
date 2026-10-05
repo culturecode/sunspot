@@ -45,9 +45,9 @@ module Sunspot
     # Remove the given model from the Solr index
     #
     def remove(*models)
-      @connection.delete_by_id(
-        models.map { |model| Adapters::InstanceAdapter.adapt(model).index_id }
-      )
+      ids = models.map { |model| Adapters::InstanceAdapter.adapt(model).index_id }
+      @connection.delete_by_id(ids)
+      remove_blocks(ids.select.with_index { |_, i| nested?(models[i].class) })
     end
 
     # 
@@ -70,9 +70,9 @@ module Sunspot
       end
 
       ids.flatten!
-      @connection.delete_by_id(
-        ids.map { |id| Adapters::InstanceAdapter.index_id_for("#{id_prefix}#{class_name}", id) }
-      )
+      index_ids = ids.map { |id| Adapters::InstanceAdapter.index_id_for("#{id_prefix}#{class_name}", id) }
+      @connection.delete_by_id(index_ids)
+      remove_blocks(index_ids) if nested?(Util.full_const_get(class_name))
     end
 
     #
@@ -80,6 +80,11 @@ module Sunspot
     #
     def remove_all(clazz = nil)
       if clazz
+        # Children are deleted first, because the query that finds them goes
+        # through their parents.
+        if nested?(clazz)
+          @connection.delete_by_query(children_of("type:#{Util.escape(clazz.name)}"))
+        end
         @connection.delete_by_query("type:#{Util.escape(clazz.name)}")
       else
         @connection.delete_by_query("*:*")
@@ -89,7 +94,12 @@ module Sunspot
     # 
     # Remove all documents that match the scope given in the Query
     #
-    def remove_by_scope(scope)
+    def remove_by_scope(scope, types = [])
+      # Children are deleted first, because the query that finds them goes
+      # through their parents.
+      if types.any? { |type| nested?(type) }
+        @connection.delete_by_query(children_of(scope.to_boolean_phrase))
+      end
       @connection.delete_by_query(scope.to_boolean_phrase)
     end
 
@@ -125,10 +135,85 @@ module Sunspot
       setup.all_field_factories.each do |field_factory|
         field_factory.populate_document(document, model)
       end
+      setup.nested_setups.each do |nested_setup|
+        add_child_documents(document, nested_setup, model)
+      end
       document
     end
 
+    #
+    # Adds a child document to +document+ for each of the model's children in
+    # the association, so Solr indexes the parent and its children as one
+    # block. Raises NestedDocumentsNotSupportedError when there are children
+    # and RSolr cannot send child documents.
+    #
+    # A child's id is the parent's id followed by the association name and
+    # #child_key, so it is unique within the index and carries the parent's
+    # id prefix.
+    #
+    def add_child_documents(document, nested_setup, model)
+      children = nested_setup.children_for(model)
+      return if children.empty?
+      ensure_child_documents_supported!
+
+      parent_id = document.field_by_name(:id).value
+      children.each_with_index do |child, position|
+        child_document = RSolr::Xml::Document.new(
+          id: "#{parent_id}/#{nested_setup.name}/#{child_key(child, position)}",
+          NestedSetup::PATH_FIELD.to_sym => nested_setup.path
+        )
+        nested_setup.all_field_factories.each do |field_factory|
+          field_factory.populate_document(child_document, child)
+        end
+        document.add_field(RSolr::Document::CHILD_DOCUMENT_KEY, child_document)
+      end
+    end
+
+    # Returns the child's index id when it has an adapter, so a child document
+    # can be traced back to its record. Returns its position in the
+    # association otherwise.
+    def child_key(child, position)
+      Adapters::InstanceAdapter.adapt(child).index_id
+    rescue NoAdapterError
+      position
+    end
+
+    def ensure_child_documents_supported!
+      return if defined?(RSolr::Document::CHILD_DOCUMENT_KEY)
+      raise NestedDocumentsNotSupportedError, "Nested documents require an RSolr version that defines RSolr::Document::CHILD_DOCUMENT_KEY"
+    end
+
+    def nested?(clazz)
+      setup = Setup.for(clazz)
+      !setup.nil? && setup.nested_setups.any?
+    end
+
+    #
+    # Deletes every document in the blocks rooted at the given ids. Solr 9
+    # deletes a parent's children along with it on a delete by id, and Solr 6
+    # leaves them in the index. A child left behind is joined to whichever
+    # parent follows it in the index.
+    #
+    def remove_blocks(ids)
+      return if ids.empty?
+      @connection.delete_by_query("_root_:(#{ids.map { |id| %Q("#{Util.escape(id)}") }.join(' OR ')})")
+    end
+
+    #
+    # Returns a query matching the children of the parents that match
+    # +parent_query+. The block mask is every document that is not a child, so
+    # documents of other classes indexed between blocks are never matched as
+    # children.
+    #
+    def children_of(parent_query)
+      %Q({!child of="*:* -#{NestedSetup::PATH_FIELD}:[* TO *]"}#{parent_query})
+    end
+
     def prepare_atomic_update(clazz, id, updates = {})
+      if nested?(clazz)
+        raise ArgumentError, "Atomic updates are not supported for #{clazz.name}, which has nested documents. " \
+          "Index the whole record instead, which reindexes its children with it"
+      end
       document = document_for_atomic_update(clazz, id)
       setup_for_class(clazz).all_field_factories.each do |field_factory|
         if updates.has_key?(field_factory.name)

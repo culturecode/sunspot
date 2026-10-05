@@ -1,0 +1,214 @@
+require File.expand_path('spec_helper', File.dirname(__FILE__))
+
+describe 'nested documents' do
+  let(:connection) { Mock::Connection.new }
+  let(:session) { Sunspot::Session.new(Sunspot::Configuration.build, connection) }
+  let(:roots) { '*:* -_sunspot_nested_path_s:[* TO *]' }
+
+  def last_fq
+    connection.searches.last[:fq]
+  end
+
+  describe 'setup' do
+    it 'resolves child fields against the association, not the parent' do
+      nested_setup = Sunspot::Setup.for(Project).nested_setup(:milestones)
+      expect(nested_setup.field(:started_at).indexed_name).to eq('started_at_d')
+      expect { nested_setup.field(:status) }.to raise_error(Sunspot::UnrecognizedFieldError)
+    end
+
+    it "keeps each association's fields separate" do
+      setup = Sunspot::Setup.for(Project)
+      expect(setup.nested_setups.map(&:name)).to eq([:milestones, :reviews])
+      expect { setup.nested_setup(:milestones).field(:verdict) }.to raise_error(Sunspot::UnrecognizedFieldError)
+    end
+
+    it 'names each association by its declaring class' do
+      expect(Sunspot::Setup.for(Project).nested_setup(:milestones).path).to eq('Project.milestones')
+    end
+
+    it 'raises for an association that was never declared' do
+      expect { Sunspot::Setup.for(Project).nested_setup(:tasks) }.to raise_error(Sunspot::UnrecognizedFieldError)
+    end
+
+    it 'rejects boosts, nested associations and joins in a nested block' do
+      expect { Sunspot::Setup.for(Project).add_nested(:x) { boost 2 } }.to raise_error(ArgumentError)
+      expect { Sunspot::Setup.for(Project).add_nested(:x) { nested(:y) {} } }.to raise_error(ArgumentError)
+      expect { Sunspot::Setup.for(Project).add_nested(:x) { join(:y, :target => Post, :type => :string, :join => { :from => :a, :to => :b }) } }.to raise_error(ArgumentError)
+    end
+  end
+
+  describe 'indexing' do
+    let(:milestone) { Milestone.new(:name => 'design', :started_at => Time.utc(2026, 2, 1), :owner_names => %w(ana ben)) }
+    let(:project) { Project.new(:name => 'Bridge', :milestones => [milestone], :reviews => [OpenStruct.new(:verdict => 'approved')]) }
+
+    def indexed_project
+      session.index(project)
+      connection.adds.last.first
+    end
+
+    def children(document)
+      document.fields_by_name(RSolr::Document::CHILD_DOCUMENT_KEY).map(&:value)
+    end
+
+    it 'sends children inside the parent document' do
+      expect(children(indexed_project).length).to eq(2)
+    end
+
+    it 'gives each child an id derived from its parent, and its own index id when it has an adapter' do
+      milestone_doc = children(indexed_project).first
+      expect(milestone_doc.field_by_name(:id).value).to eq("Project #{project.id}/milestones/Milestone #{milestone.id}")
+    end
+
+    it 'falls back to the position in the association for children without an adapter' do
+      review_doc = children(indexed_project).last
+      expect(review_doc.field_by_name(:id).value).to eq("Project #{project.id}/reviews/0")
+    end
+
+    it 'marks each child with its association and gives it no type of its own' do
+      milestone_doc = children(indexed_project).first
+      expect(milestone_doc.field_by_name(:_sunspot_nested_path_s).value).to eq('Project.milestones')
+      expect(milestone_doc.field_by_name(:type)).to be_nil
+      expect(milestone_doc.field_by_name(:class_name)).to be_nil
+    end
+
+    it 'indexes the child fields, evaluating blocks against the child' do
+      milestone_doc = children(indexed_project).first
+      expect(milestone_doc.field_by_name(:name_s).value).to eq('design')
+      expect(milestone_doc.field_by_name(:started_at_d).value).to eq('2026-02-01T00:00:00Z')
+      expect(milestone_doc.fields_by_name(:owner_names_sm).map(&:value)).to eq(%w(ana ben))
+      expect(milestone_doc.field_by_name(:days_late_i).value).to eq('0')
+    end
+
+    it 'keeps the parent fields on the parent' do
+      expect(indexed_project.field_by_name(:name_s).value).to eq('Bridge')
+    end
+
+    it 'sends no children for an empty association' do
+      session.index(Project.new(:name => 'Empty'))
+      expect(children(connection.adds.last.first)).to be_empty
+    end
+
+    it 'refuses atomic updates to a class with nested associations' do
+      expect { session.atomic_update(Project, project.id => { :name => 'x' }) }.to raise_error(ArgumentError, /nested documents/)
+    end
+  end
+
+  describe 'querying' do
+    it 'finds parents by conditions a single child meets together' do
+      session.search(Project) do
+        with_child :milestones do
+          with :name, 'design'
+          with(:started_at).greater_than(Time.utc(2026, 1, 1))
+        end
+      end
+      expect(last_fq).to include(
+        %q(_query_:"{!parent which=\\"*:* -_sunspot_nested_path_s:[* TO *]\\" v=\\"(_sunspot_nested_path_s:\\\\\\"Project.milestones\\\\\\" AND name_s:design AND started_at_d:{2026\\\\\\\\-01\\\\\\\\-01T00\\\\\\\\:00\\\\\\\\:00Z TO *})\\"}")
+      )
+    end
+
+    it 'scopes a block with no restrictions to the association alone' do
+      session.search(Project) { with_child(:milestones) }
+      expect(last_fq.last).to include('v=\\"_sunspot_nested_path_s:\\\\\\"Project.milestones\\\\\\"\\"')
+    end
+
+    it 'negates with without_child' do
+      session.search(Project) { without_child(:milestones) { with :name, 'launch' } }
+      expect(last_fq.last).to start_with('-_query_:"{!parent')
+    end
+
+    it 'joins each negated restriction directly to the association condition' do
+      session.search(Project) { with_child(:milestones) { without :name, 'launch'; without :name, 'design' } }
+      expect(last_fq.last).to include('Project.milestones\\\\\\" AND -name_s:launch AND -name_s:design)')
+    end
+
+    it 'combines with parent restrictions as separate filters' do
+      session.search(Project) do
+        with :status, 'active'
+        with_child(:milestones) { with :name, 'design' }
+      end
+      expect(last_fq).to include('status_s:active')
+      expect(last_fq.last).to start_with('_query_:"{!parent')
+    end
+
+    it 'works inside any_of, including negated alternatives' do
+      session.search(Project) do
+        any_of do
+          with_child(:milestones) { with :name, 'design' }
+          without_child(:milestones) { with :name, 'launch' }
+        end
+      end
+      expect(last_fq.last).to match(/\A-\(-_query_:"\{!parent .*name_s:design.* AND _query_:"\{!parent .*name_s:launch.*\)\z/)
+    end
+
+    it 'supports connectives inside the block' do
+      session.search(Project) do
+        with_child :milestones do
+          any_of do
+            with :name, 'design'
+            with :name, 'build'
+          end
+        end
+      end
+      expect(last_fq.last).to include('(name_s:design OR name_s:build)')
+    end
+
+    it 'escapes quotes and backslashes through both levels of nesting' do
+      value = %q(say "hi" \ bye)
+      session.search(Project) { with_child(:milestones) { with :name, value } }
+
+      # Undo the escaping the way Solr's parsers will: the _query_ phrase, then the local param
+      unescape = ->(string) { string.gsub(/\\(.)/, '\1') }
+      local_params = unescape.(last_fq.last[/\A_query_:"(.*)"\z/, 1])
+      child_query = unescape.(local_params[/ v="(.*)"\}\z/, 1])
+
+      expect(child_query).to eq(%Q((_sunspot_nested_path_s:"Project.milestones" AND name_s:#{Sunspot::Util.escape(value)})))
+    end
+
+    it 'raises for an association that was never declared' do
+      expect { session.search(Project) { with_child(:tasks) {} } }.to raise_error(Sunspot::UnrecognizedFieldError)
+    end
+
+    it 'resolves the association across a multi-class search' do
+      session.search(Project, Post) { with_child(:milestones) { with :name, 'design' } }
+      expect(last_fq.last).to include('Project.milestones')
+    end
+  end
+
+  describe 'removal' do
+    it 'removes the whole block when removing a parent' do
+      project = Project.new
+      session.remove(project)
+      expect(connection).to have_delete("Project #{project.id}")
+      expect(connection).to have_delete_by_query(%Q(_root_:("Project\\ #{project.id}")))
+    end
+
+    it 'removes the whole block when removing by id' do
+      session.remove_by_id(Project, 1, 2)
+      expect(connection).to have_delete('Project 1', 'Project 2')
+      expect(connection).to have_delete_by_query('_root_:("Project\\ 1" OR "Project\\ 2")')
+    end
+
+    it 'removes children before parents when removing a class' do
+      session.remove_all(Project)
+      expect(connection.deletes_by_query).to eq([
+        %Q({!child of="#{roots}"}type:Project),
+        'type:Project'
+      ])
+    end
+
+    it 'removes children before parents when removing by scope' do
+      session.remove(Project) { with :status, 'archived' }
+      expect(connection.deletes_by_query).to eq([
+        %Q({!child of="#{roots}"}(type:Project AND status_s:archived)),
+        '(type:Project AND status_s:archived)'
+      ])
+    end
+
+    it 'leaves classes without nested documents alone' do
+      post = Post.new
+      session.remove(post)
+      session.remove_all(Post)
+      expect(connection.deletes_by_query).to eq(['type:Post'])
+    end
+  end
+end

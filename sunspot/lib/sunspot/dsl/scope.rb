@@ -98,6 +98,45 @@ module Sunspot
       end
 
       #
+      # Scope the results to documents with at least one child in the given
+      # association that satisfies every restriction in the block. Without a
+      # block, any child in the association matches. The association is one
+      # declared with DSL::Fields#nested.
+      #
+      # The block takes the same restrictions as a scope, with field names
+      # referring to the child's fields.
+      #
+      # ==== Example
+      #
+      #   Sunspot.search(Project) do
+      #     with_child :milestones do
+      #       with :name, 'design'
+      #       with(:started_at).between(Time.utc(2026, 1, 1)...Time.utc(2026, 4, 1))
+      #     end
+      #   end
+      #
+      def with_child(name, &block)
+        add_block_join(false, name, &block)
+      end
+
+      #
+      # Scope the results to documents with no child in the given association
+      # that satisfies every restriction in the block. Documents with no
+      # children in the association match. Without a block, only those match.
+      #
+      # ==== Example
+      #
+      #   Sunspot.search(Project) do
+      #     without_child :milestones do
+      #       with :name, 'launch'
+      #     end
+      #   end
+      #
+      def without_child(name, &block)
+        add_block_join(true, name, &block)
+      end
+
+      #
       # Create a disjunction, scoping the results to documents that match any
       # of the enclosed restrictions.
       #
@@ -196,6 +235,13 @@ module Sunspot
       end
 
       private
+
+      def add_block_join(negated, name, &block)
+        nested_setup = @setup.nested_setup(name)
+        block_join = Sunspot::Query::BlockJoin.new(nested_setup, negated)
+        Util.instance_eval_or_call(Scope.new(block_join.scope, nested_setup), &block) if block
+        @scope.add_component(block_join)
+      end
 
       def add_restriction(negated, *args)
         case args.first
