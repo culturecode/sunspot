@@ -1,6 +1,7 @@
 require File.expand_path('../spec_helper', File.dirname(__FILE__))
 
-describe 'nested documents' do
+# RSolr 1.x has no RSolr::Document, so it can't send child documents
+describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY) do
   def milestone(name, started_at, attrs = {})
     Milestone.new({ :name => name, :started_at => started_at }.merge(attrs))
   end

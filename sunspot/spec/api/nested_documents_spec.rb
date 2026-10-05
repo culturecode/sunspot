@@ -1,5 +1,8 @@
 require File.expand_path('spec_helper', File.dirname(__FILE__))
 
+# RSolr 1.x has no RSolr::Document, so it can't send child documents
+child_documents = defined?(RSolr::Document::CHILD_DOCUMENT_KEY)
+
 describe 'nested documents' do
   let(:connection) { Mock::Connection.new }
   let(:session) { Sunspot::Session.new(Sunspot::Configuration.build, connection) }
@@ -37,7 +40,7 @@ describe 'nested documents' do
     end
   end
 
-  describe 'indexing' do
+  describe 'indexing', :if => child_documents do
     let(:milestone) { Milestone.new(:name => 'design', :started_at => Time.utc(2026, 2, 1), :owner_names => %w(ana ben)) }
     let(:project) { Project.new(:name => 'Bridge', :milestones => [milestone], :reviews => [OpenStruct.new(:verdict => 'approved')]) }
 
@@ -88,8 +91,23 @@ describe 'nested documents' do
       expect(children(connection.adds.last.first)).to be_empty
     end
 
+  end
+
+  describe 'indexing with an RSolr that has no child documents', :unless => child_documents do
+    it 'raises for a parent with children' do
+      project = Project.new(:name => 'Bridge', :milestones => [Milestone.new(:name => 'design')])
+      expect { session.index(project) }.to raise_error(Sunspot::NestedDocumentsNotSupportedError)
+    end
+
+    it 'indexes a parent with no children' do
+      session.index(Project.new(:name => 'Empty'))
+      expect(connection.adds.last.first.field_by_name(:name_s).value).to eq('Empty')
+    end
+  end
+
+  describe 'atomic updates' do
     it 'refuses atomic updates to a class with nested associations' do
-      expect { session.atomic_update(Project, project.id => { :name => 'x' }) }.to raise_error(ArgumentError, /nested documents/)
+      expect { session.atomic_update(Project, 1 => { :name => 'x' }) }.to raise_error(ArgumentError, /nested documents/)
     end
   end
 
