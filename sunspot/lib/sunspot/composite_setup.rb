@@ -102,10 +102,8 @@ module Sunspot
     end
 
     #
-    # Returns every NestedSetup a search of the enclosed types has to cover for
-    # the given association, from each type that declares it and from their
-    # subclasses that declare it again. Raises UnrecognizedFieldError when none
-    # does.
+    # Returns the NestedSetup of each enclosed type that declares the given
+    # association. Raises UnrecognizedFieldError when none does.
     #
     def nested_setups_named(name)
       nested_setups = setups.flat_map do |setup|

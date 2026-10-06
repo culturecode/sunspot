@@ -113,5 +113,36 @@ Sunspot.setup(Gadget) do
   nested :milestones do
     string(:only_here) { 'yes' }
     integer(:started_at) { 1 }
+    text(:notes) { 'gadget notes' }
+  end
+end
+
+# Child fields of every kind, and a subclass that declares the association
+# again with one of them typed differently
+class Crate < MockRecord
+  attr_accessor :name
+  attr_writer :items
+
+  def items
+    @items ||= []
+  end
+end
+
+class SubCrate < Crate
+end
+
+Sunspot.setup(Crate) do
+  string :name
+
+  nested :items do
+    time :at
+    text :body
+    dynamic_string :attrs
+  end
+end
+
+Sunspot.setup(SubCrate) do
+  nested :items do
+    string(:at) { 'x' }
   end
 end

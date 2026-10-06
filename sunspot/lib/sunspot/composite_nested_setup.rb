@@ -1,10 +1,10 @@
 module Sunspot
   #
-  # The fields of one association's children across several NestedSetups:
-  # one per searched class, and one per subclass that declares the association
-  # again. A field resolves when every setup that declares it agrees on its
-  # Solr field, as with CompositeSetup, and raises UnrecognizedFieldError when
-  # none declares it or they declare it differently.
+  # The fields of one association's children across the NestedSetups of the
+  # classes in a multi-class search. A field resolves when every setup that
+  # declares it agrees on its Solr field name and type, as with CompositeSetup,
+  # and raises UnrecognizedFieldError when none declares it or they declare it
+  # differently.
   #
   class CompositeNestedSetup #:nodoc:
     def initialize(nested_setups)
@@ -18,7 +18,7 @@ module Sunspot
         rescue UnrecognizedFieldError
           nil
         end
-      end.compact.uniq(&:indexed_name)
+      end.compact.uniq { |field| [field.indexed_name, field.type.class] }
       return fields.first if fields.one?
 
       raise(
@@ -26,6 +26,25 @@ module Sunspot
         fields.empty? ? "No field configured for #{paths} with name '#{field_name}'" :
           "Field '#{field_name}' is configured differently for #{paths}"
       )
+    end
+
+    # Returns the text fields with the given name, one per distinct Solr field.
+    # TextFieldSetup raises when there is more than one.
+    def text_fields(field_name)
+      fields = @nested_setups.flat_map do |setup|
+        begin
+          setup.text_fields(field_name)
+        rescue UnrecognizedFieldError
+          []
+        end
+      end.uniq(&:indexed_name)
+      return fields if fields.any?
+
+      raise UnrecognizedFieldError, "No text field configured for #{paths} with name '#{field_name}'"
+    end
+
+    def type_names
+      @nested_setups.map(&:path).uniq
     end
 
     def dynamic_field_factory(field_name)
@@ -44,7 +63,7 @@ module Sunspot
     private
 
     def paths
-      @nested_setups.map(&:path).uniq * ', '
+      type_names * ', '
     end
   end
 end

@@ -41,13 +41,13 @@ module Sunspot
       add_batch_documents(documents)
     end
 
-    # 
-    # Remove the given model from the Solr index
-    #
     # REMOVE_BLOCKS_BATCH_SIZE keeps each +_root_+ delete query under Solr's
     # default limit of 1024 boolean clauses.
     REMOVE_BLOCKS_BATCH_SIZE = 500
 
+    # 
+    # Remove the given model from the Solr index
+    #
     def remove(*models)
       ids = models.map { |model| Adapters::InstanceAdapter.adapt(model).index_id }
       @connection.delete_by_id(ids)

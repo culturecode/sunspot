@@ -229,6 +229,22 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
       end
     end
 
+    it 'searches text fields on the children of several classes' do
+      gadget = Gadget.new(:name => 'gadget', :milestones => [milestone('design', Time.utc(2026, 2, 1))])
+      Sunspot.index!(gadget)
+
+      expect(Sunspot.search(Project, Gadget) { with_child(:milestones) { text_fields { with :notes, 'gadget notes' } } }.results).to eq([gadget])
+    end
+
+    it "resolves a superclass's child fields from its own setup when a subclass declares the association again" do
+      crate = Crate.new(:name => 'crate', :items => [OpenStruct.new(:at => Time.utc(2026, 2, 1), :body => 'design', :attrs => { :color => 'red' })])
+      Sunspot.index!(crate)
+
+      expect(Sunspot.search(Crate) { with_child(:items) { with(:at).greater_than(Time.utc(2026, 1, 1)) } }.results).to eq([crate])
+      expect(Sunspot.search(Crate) { with_child(:items) { text_fields { with :body, 'design' } } }.results).to eq([crate])
+      expect(Sunspot.search(Crate) { with_child(:items) { dynamic(:attrs) { with :color, 'red' } } }.results).to eq([crate])
+    end
+
     it 'rejects a child field the searched classes declare differently' do
       expect { Sunspot.search(Project, Gadget) { with_child(:milestones) { with(:started_at).greater_than(0) } } }.to raise_error(Sunspot::UnrecognizedFieldError)
     end

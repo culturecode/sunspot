@@ -80,28 +80,13 @@ module Sunspot
     end
 
     #
-    # Returns every NestedSetup a search of this class has to cover for the
-    # given association: its own, inherited if need be, and those of
-    # registered subclasses that declare the association again. Raises
+    # Returns the NestedSetups a search of this class covers for the given
+    # association: its own, inherited if need be. A subclass that declares the
+    # association again keeps its path, so its children match too. Raises
     # UnrecognizedFieldError when this class has no such association.
     #
     def nested_setups_named(name)
-      own = nested_setup(name)
-      redeclared = Setup.all.map do |setup|
-        next if setup.equal?(self)
-        subclass = begin
-          setup.clazz <= clazz
-        rescue NameError
-          false
-        end
-        setup.declared_nested_setup(name) if subclass
-      end
-      [own, *redeclared.compact].uniq
-    end
-
-    # Returns the NestedSetup declared on this class itself, not inherited.
-    def declared_nested_setup(name)
-      @nested_setups[name.to_sym]
+      [nested_setup(name)]
     end
 
     # 
@@ -445,11 +430,6 @@ module Sunspot
       #   
       def for(clazz) #:nodoc:
         setups[clazz.name.to_sym] || self.for(clazz.superclass) if clazz
-      end
-
-      # Returns every class's setup.
-      def all #:nodoc:
-        setups.values
       end
 
       # Returns true when any class's setup declares a nested association.
