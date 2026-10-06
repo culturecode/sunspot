@@ -32,11 +32,18 @@ Gem::Specification.new do |s|
 
   s.add_dependency 'rails', '>= 5'
   s.add_dependency 'sunspot', Sunspot::VERSION
+  s.add_dependency 'ostruct'
+  s.add_dependency 'logger'
   
   s.add_development_dependency 'appraisal', '~> 2.5'
   s.add_development_dependency 'bundler',  '>= 1.3.0', '< 2.0' if RUBY_VERSION <= '2.0.0'
   s.add_development_dependency 'nokogiri', '< 1.7' if RUBY_VERSION <= '2.0.0'
   s.add_development_dependency 'rake', '~> 13.2'
+  
+  # Ruby 2.5 compatibility
+  if RUBY_VERSION < '2.6'
+    s.add_development_dependency 'psych', '< 4.0'
+  end
 
   s.rdoc_options << '--webcvs=http://github.com/outoftime/sunspot/tree/master/%s' <<
                   '--title' << 'Sunspot-Rails - Rails integration for the Sunspot Solr search library - API Documentation' <<

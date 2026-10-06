@@ -89,6 +89,23 @@ shared_examples_for "facetable query" do
       end
       expect(connection).to have_last_search_with(:"f.title_ss.facet.prefix" => 'Test')
     end
+
+    it 'sets the facet matches pattern' do
+      search do
+        facet :title, :matches => 'Test.*'
+      end
+      expect(connection).to have_last_search_with(:"f.title_ss.facet.matches" => 'Test.*')
+    end
+
+    it 'does not restrict other facets in the same search' do
+      search do
+        facet :title, :matches => 'Test.*'
+        facet :category_ids
+      end
+      expect(connection).to have_last_search_with(:"f.title_ss.facet.matches" => 'Test.*')
+      expect(connection).not_to have_last_search_with(:"f.category_ids_im.facet.matches")
+      expect(connection).not_to have_last_search_with(:"facet.matches")
+    end
     
     it 'sends a query facet for :any extra' do
       search do

@@ -28,9 +28,17 @@ Gem::Specification.new do |s|
   s.add_dependency 'rsolr', '>= 1.1.1', '< 3'
   s.add_dependency 'pr_geohash', '~>1.0'
   s.add_dependency 'bigdecimal'
+  s.add_dependency 'ostruct'
+  s.add_dependency 'logger'
   s.add_development_dependency 'rake', '~> 13.2'
   s.add_development_dependency 'rspec', '~> 3.7'
   s.add_development_dependency 'appraisal', '~> 2.5'
+  s.add_development_dependency 'rdoc'
+  
+  # Ruby 2.5 compatibility
+  if RUBY_VERSION < '2.6'
+    s.add_development_dependency 'psych', '< 4.0'
+  end
 
   s.rdoc_options << '--webcvs=http://github.com/outoftime/sunspot/tree/master/%s' <<
                   '--title' << 'Sunspot - Solr-powered search for Ruby objects - API Documentation' <<
