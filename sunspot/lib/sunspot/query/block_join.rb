@@ -22,9 +22,9 @@ module Sunspot
       # negated ones included, is joined to that condition.
       attr_reader :scope
 
-      def initialize(nested_setup, negated = false, scope = nil)
-        @nested_setup, @negated = nested_setup, negated
-        @scope = scope || Connective::Conjunction.new.tap { |conjunction| conjunction.add_component(PathRestriction.new(nested_setup)) }
+      def initialize(nested_setup, negated = false, scope = nil, paths = [nested_setup.path])
+        @nested_setup, @negated, @paths = nested_setup, negated, paths
+        @scope = scope || Connective::Conjunction.new.tap { |conjunction| conjunction.add_component(PathRestriction.new(paths)) }
       end
 
       def to_boolean_phrase
@@ -37,7 +37,7 @@ module Sunspot
       end
 
       def negate
-        self.class.new(@nested_setup, !negated?, @scope)
+        self.class.new(@nested_setup, !negated?, @scope, @paths)
       end
 
       private
@@ -64,14 +64,16 @@ module Sunspot
         value.gsub(/(["\\])/, '\\\\\1')
       end
 
-      # The condition matching the children of one nested association.
+      # The condition matching the children of a nested association, on any
+      # of the given PATH_FIELD values.
       class PathRestriction #:nodoc:
-        def initialize(nested_setup)
-          @nested_setup = nested_setup
+        def initialize(paths)
+          @paths = paths
         end
 
         def to_boolean_phrase
-          %Q(#{NestedSetup::PATH_FIELD}:"#{BlockJoin.escape(@nested_setup.path)}")
+          phrases = @paths.map { |path| %Q(#{NestedSetup::PATH_FIELD}:"#{BlockJoin.escape(path)}") }
+          phrases.one? ? phrases.first : "(#{phrases.join(' OR ')})"
         end
 
         def negated?

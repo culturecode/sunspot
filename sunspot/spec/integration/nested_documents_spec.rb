@@ -124,6 +124,23 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
       expect(solr_count('_sunspot_nested_path_s:[* TO *]')).to eq(2)
       expect(search { with_child(:milestones) { with :owner_names, 'ben' } }).to eq([])
     end
+
+    it 'removes every child when a parent is reindexed with none' do
+      @designed_earlier.milestones = []
+      Sunspot.index!(@designed_earlier)
+
+      expect(solr_count(%Q(_root_:"Project #{@designed_earlier.id}" AND _sunspot_nested_path_s:[* TO *]))).to eq(0)
+      expect(solr_count(%Q(id:"Project #{@designed_earlier.id}"))).to eq(1)
+    end
+
+    it 'replaces a parent that had no children when it is reindexed with some' do
+      @without_milestones.milestones = [milestone('launch', Time.utc(2026, 3, 1))]
+      Sunspot.index!(@without_milestones)
+
+      expect(solr_count(%Q(id:"Project #{@without_milestones.id}"))).to eq(1)
+      expect(Sunspot.search(Project).hits.length).to eq(3)
+      expect(search { with_child(:milestones) { with :name, 'launch' } }).to eq([@without_milestones])
+    end
   end
 
   describe 'removal' do
@@ -148,11 +165,50 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
       expect(search {}).to match_array([@designed_in_q1, @without_milestones])
     end
 
+    it 'removes the parents a child condition selects, with their children' do
+      Sunspot.remove!(Project) { with_child(:milestones) { with :owner_names, 'ben' } }
+
+      expect(solr_count(%Q(_root_:"Project #{@designed_earlier.id}"))).to eq(0)
+      expect(children).to eq(1)
+      expect(search {}).to match_array([@designed_in_q1, @without_milestones])
+    end
+
     it 'removes every child when removing the class, and nothing else' do
       Sunspot.remove_all!(Project)
       expect(children).to eq(0)
       expect(solr_count('*:*')).to eq(1)
       expect(Sunspot.search(Memo).results).to eq([@memo])
+    end
+  end
+
+  describe 'other classes with the same association' do
+    let(:t) { Time.utc(2026, 2, 1) }
+
+    it 'finds a subclass that declares the association again through a search of its superclass' do
+      sub_project = SubProject.new(:name => 'sub', :milestones => [milestone('review', t)])
+      Sunspot.index!(sub_project)
+
+      expect(search { with_child(:milestones) { with :name, 'review' } }).to eq([sub_project])
+    end
+
+    it 'matches children of every searched class that declares the association' do
+      program = Program.new(:name => 'program', :milestones => [milestone('design', t)])
+      Sunspot.index!(program)
+
+      [[Project, Program], [Program, Project]].each do |types|
+        results = Sunspot.search(*types) { with_child(:milestones) { with :name, 'design' } }.results
+        expect(results).to match_array([@designed_in_q1, @designed_earlier, program])
+      end
+    end
+
+    it 'removes the children of a nested subclass when removing through its superclass' do
+      Sunspot.index!(Vehicle.new(:name => 'van', :parts => [milestone('wheel', t)]))
+      Sunspot.remove_all!(Asset)
+      expect(solr_count('_sunspot_nested_path_s:"Vehicle.parts"')).to eq(0)
+
+      Sunspot.index!(Vehicle.new(:name => 'van', :parts => [milestone('wheel', t)]))
+      Sunspot.remove!(Asset) { with :name, 'van' }
+      expect(solr_count('_sunspot_nested_path_s:"Vehicle.parts"')).to eq(0)
     end
   end
 end

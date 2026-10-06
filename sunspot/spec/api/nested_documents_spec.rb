@@ -86,6 +86,17 @@ describe 'nested documents' do
       expect(indexed_project.field_by_name(:name_s).value).to eq('Bridge')
     end
 
+    it 'deletes the previous block by id before indexing a parent with children' do
+      indexed_project
+      expect(connection).to have_delete("Project #{project.id}")
+    end
+
+    it 'deletes the previous block by _root_ before indexing a parent without children' do
+      empty = Project.new(:name => 'Empty')
+      session.index(empty)
+      expect(connection).to have_delete_by_query(%Q(_root_:("Project\\ #{empty.id}")))
+    end
+
     it 'sends no children for an empty association' do
       session.index(Project.new(:name => 'Empty'))
       expect(children(connection.adds.last.first)).to be_empty
@@ -137,6 +148,12 @@ describe 'nested documents' do
     it 'joins each negated restriction directly to the association condition' do
       session.search(Project) { with_child(:milestones) { without :name, 'launch'; without :name, 'design' } }
       expect(last_fq.last).to include('Project.milestones\\\\\\" AND -name_s:launch AND -name_s:design)')
+    end
+
+    it 'rejects an instance restriction inside a child block' do
+      milestone = Milestone.new(:name => 'design')
+      expect { session.search(Project) { with_child(:milestones) { with(milestone) } } }.to raise_error(ArgumentError, /Instance restrictions/)
+      expect { session.search(Project) { with_child(:milestones) { without(milestone) } } }.to raise_error(ArgumentError, /Instance restrictions/)
     end
 
     it 'combines with parent restrictions as separate filters' do
@@ -206,27 +223,36 @@ describe 'nested documents' do
       expect(connection).to have_delete_by_query('_root_:("Project\\ 1" OR "Project\\ 2")')
     end
 
-    it 'removes children before parents when removing a class' do
+    it 'removes the parents and their children in one query when removing a class' do
       session.remove_all(Project)
       expect(connection.deletes_by_query).to eq([
-        %Q({!child of="#{roots}"}type:Project),
-        'type:Project'
+        %q{(type:Project) OR _query_:"{!child of=\"*:* -_sunspot_nested_path_s:[* TO *]\" v=\"type:Project\"}"}
       ])
     end
 
-    it 'removes children before parents when removing by scope' do
+    it 'removes the parents and their children in one query when removing by scope' do
       session.remove(Project) { with :status, 'archived' }
       expect(connection.deletes_by_query).to eq([
-        %Q({!child of="#{roots}"}(type:Project AND status_s:archived)),
-        '(type:Project AND status_s:archived)'
+        %q{((type:Project AND status_s:archived)) OR _query_:"{!child of=\"*:* -_sunspot_nested_path_s:[* TO *]\" v=\"(type:Project AND status_s:archived)\"}"}
       ])
     end
 
-    it 'leaves classes without nested documents alone' do
-      post = Post.new
-      session.remove(post)
+    it "removes a nested subclass's children when removing a class without nested associations" do
+      session.remove_all(Asset)
+      expect(connection.deletes_by_query).to eq([
+        %q{(type:Asset) OR _query_:"{!child of=\"*:* -_sunspot_nested_path_s:[* TO *]\" v=\"type:Asset\"}"}
+      ])
+    end
+
+    it 'removes a class with no nested associations anywhere beneath it by its plain query' do
       session.remove_all(Post)
-      expect(connection.deletes_by_query).to eq(['type:Post'])
+      session.remove(Post) { with :title, 'monkeys' }
+      expect(connection.deletes_by_query).to eq(['type:Post', '(type:Post AND title_ss:monkeys)'])
+    end
+
+    it 'sends no block delete when removing a record of a class without nested associations' do
+      session.remove(Post.new)
+      expect(connection.deletes_by_query).to be_empty
     end
   end
 end

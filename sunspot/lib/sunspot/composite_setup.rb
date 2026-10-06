@@ -106,6 +106,17 @@ module Sunspot
     # searched types that declares it. Raises UnrecognizedFieldError when none
     # does.
     #
+    def nested_paths(name)
+      paths = setups.map do |setup|
+        begin
+          setup.nested_setup(name).path
+        rescue UnrecognizedFieldError
+          nil
+        end
+      end.compact.uniq
+      paths.empty? ? [nested_setup(name).path] : paths
+    end
+
     def nested_setup(name)
       setups.each do |setup|
         begin

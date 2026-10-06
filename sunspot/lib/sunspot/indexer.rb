@@ -22,7 +22,9 @@ module Sunspot
     # model<Object>:: the model to index
     #
     def add(model)
-      documents = Util.Array(model).map { |m| prepare_full_update(m) }
+      models = Util.Array(model)
+      documents = models.map { |m| prepare_full_update(m) }
+      remove_replaced_blocks(models, documents)
       add_batch_documents(documents)
     end
 
@@ -72,7 +74,7 @@ module Sunspot
       ids.flatten!
       index_ids = ids.map { |id| Adapters::InstanceAdapter.index_id_for("#{id_prefix}#{class_name}", id) }
       @connection.delete_by_id(index_ids)
-      remove_blocks(index_ids) if nested?(Util.full_const_get(class_name))
+      remove_blocks(index_ids) if nested_class_name?(class_name)
     end
 
     #
@@ -80,12 +82,7 @@ module Sunspot
     #
     def remove_all(clazz = nil)
       if clazz
-        # Children are deleted first, because the query that finds them goes
-        # through their parents.
-        if nested?(clazz)
-          @connection.delete_by_query(children_of("type:#{Util.escape(clazz.name)}"))
-        end
-        @connection.delete_by_query("type:#{Util.escape(clazz.name)}")
+        @connection.delete_by_query(with_children("type:#{Util.escape(clazz.name)}", [clazz]))
       else
         @connection.delete_by_query("*:*")
       end
@@ -95,12 +92,7 @@ module Sunspot
     # Remove all documents that match the scope given in the Query
     #
     def remove_by_scope(scope, types = [])
-      # Children are deleted first, because the query that finds them goes
-      # through their parents.
-      if types.any? { |type| nested?(type) }
-        @connection.delete_by_query(children_of(scope.to_boolean_phrase))
-      end
-      @connection.delete_by_query(scope.to_boolean_phrase)
+      @connection.delete_by_query(with_children(scope.to_boolean_phrase, types))
     end
 
     # 
@@ -188,6 +180,38 @@ module Sunspot
       !setup.nil? && setup.nested_setups.any?
     end
 
+    # Returns true when the named class has nested associations, or when it
+    # no longer exists and any class does, since its documents may have
+    # children.
+    def nested_class_name?(class_name)
+      nested?(Util.full_const_get(class_name))
+    rescue NameError
+      Setup.nested_anywhere?
+    end
+
+    #
+    # Deletes the blocks the given models' documents replace. Solr before 8
+    # replaces a document with children by +_root_+ and one without by +id+,
+    # so reindexing a parent whose children went from some to none, or from
+    # none to some, would leave the old children or the old parent behind.
+    # Deleting a parent with children by id, and one without by +_root_+,
+    # clears either case.
+    #
+    def remove_replaced_blocks(models, documents)
+      with_children, without_children = [], []
+      models.each_with_index do |model, i|
+        next unless nested?(model.class)
+        id = documents[i].field_by_name(:id).value
+        (child_documents?(documents[i]) ? with_children : without_children) << id
+      end
+      @connection.delete_by_id(with_children) if with_children.any?
+      remove_blocks(without_children)
+    end
+
+    def child_documents?(document)
+      defined?(RSolr::Document::CHILD_DOCUMENT_KEY) && document.fields_by_name(RSolr::Document::CHILD_DOCUMENT_KEY).any?
+    end
+
     #
     # Deletes every document in the blocks rooted at the given ids. Solr 9
     # deletes a parent's children along with it on a delete by id, and Solr 6
@@ -200,13 +224,19 @@ module Sunspot
     end
 
     #
-    # Returns a query matching the children of the parents that match
-    # +parent_query+. The block mask is every document that is not a child, so
-    # documents of other classes indexed between blocks are never matched as
-    # children.
+    # Returns a query matching the documents +query+ matches and, when one of
+    # +classes+ or a subclass of one has nested associations, their children
+    # too. Solr evaluates it once, so a delete by it removes the parents and
+    # children together, and a parent condition that refers to children still
+    # matches the parents. The block mask is every document that is not a
+    # child, so documents of other classes indexed between blocks are never
+    # matched as children.
     #
-    def children_of(parent_query)
-      %Q({!child of="*:* -#{NestedSetup::PATH_FIELD}:[* TO *]"}#{parent_query})
+    def with_children(query, classes)
+      return query unless Setup.nested_under?(classes)
+      escape = Query::BlockJoin.method(:escape)
+      children = %Q({!child of="#{escape.(Query::BlockJoin::ROOTS)}" v="#{escape.(query)}"})
+      %Q((#{query}) OR _query_:"#{escape.(children)}")
     end
 
     def prepare_atomic_update(clazz, id, updates = {})

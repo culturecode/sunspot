@@ -15,10 +15,11 @@ module Sunspot
 
     attr_reader :name, :parent_setup
 
-    def initialize(parent_setup, name, options = {})
+    def initialize(parent_setup, name, options = {}, path = nil)
       @parent_setup = parent_setup
       @name = name.to_sym
       @class_name = "#{parent_setup.type_names.first}.#{@name}"
+      @path = path || @class_name
       @field_factories, @text_field_factories, @dynamic_field_factories,
         @field_factories_cache, @text_field_factories_cache,
         @dynamic_field_factories_cache = *Array.new(6) { Hash.new }
@@ -35,7 +36,7 @@ module Sunspot
     # "Project.milestones".
     #
     def path
-      @class_name
+      @path
     end
 
     def children_for(model)

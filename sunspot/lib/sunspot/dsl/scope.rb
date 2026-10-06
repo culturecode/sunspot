@@ -238,7 +238,7 @@ module Sunspot
 
       def add_block_join(negated, name, &block)
         nested_setup = @setup.nested_setup(name)
-        block_join = Sunspot::Query::BlockJoin.new(nested_setup, negated)
+        block_join = Sunspot::Query::BlockJoin.new(nested_setup, negated, nil, @setup.nested_paths(name))
         Util.instance_eval_or_call(Scope.new(block_join.scope, nested_setup), &block) if block
         @scope.add_component(block_join)
       end
@@ -255,6 +255,9 @@ module Sunspot
             DSL::Restriction.new(field, @scope, negated)
           end
         else # args are instances
+          if @setup.is_a?(NestedSetup)
+            raise ArgumentError, "Instance restrictions are not supported inside with_child or without_child; restrict on the child's fields instead"
+          end
           @scope.add_restriction(
             negated,
             IdField.instance,

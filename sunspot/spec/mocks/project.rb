@@ -42,3 +42,54 @@ end
 Sunspot.setup(Memo) do
   string :name
 end
+
+# A subclass that declares the same association again
+class SubProject < Project
+end
+
+Sunspot.setup(SubProject) do
+  nested :milestones do
+    string :name
+  end
+end
+
+# An unrelated class with an association of the same name
+class Program < MockRecord
+  attr_accessor :name
+  attr_writer :milestones
+
+  def milestones
+    @milestones ||= []
+  end
+end
+
+Sunspot.setup(Program) do
+  string :name
+
+  nested :milestones do
+    string :name
+  end
+end
+
+# A superclass with no nested associations, and a subclass that has one
+class Asset < MockRecord
+  attr_accessor :name
+end
+
+Sunspot.setup(Asset) do
+  string :name
+end
+
+class Vehicle < Asset
+  attr_writer :parts
+
+  def parts
+    @parts ||= []
+  end
+end
+
+Sunspot.setup(Vehicle) do
+  nested :parts do
+    string :name
+  end
+end

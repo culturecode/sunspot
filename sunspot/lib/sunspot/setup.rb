@@ -57,7 +57,8 @@ module Sunspot
     # added to.
     #
     def add_nested(name, options = {}, &block)
-      nested_setup = NestedSetup.new(self, name, options)
+      inherited = parent && parent.get_inheritable_hash(:nested_setups)[name.to_sym]
+      nested_setup = NestedSetup.new(self, name, options, inherited && inherited.path)
       nested_setup.setup(&block) if block
       @nested_setups[nested_setup.name] = nested_setup
     end
@@ -76,6 +77,14 @@ module Sunspot
 
     def nested_setups
       collection_from_inheritable_hash(:nested_setups)
+    end
+
+    #
+    # Returns the PATH_FIELD values of the given association's children: one
+    # here, one per searched type that declares it on a CompositeSetup.
+    #
+    def nested_paths(name)
+      [nested_setup(name).path]
     end
 
     # 
@@ -421,6 +430,25 @@ module Sunspot
         setups[clazz.name.to_sym] || self.for(clazz.superclass) if clazz
       end
 
+      # Returns true when any class's setup declares a nested association.
+      def nested_anywhere? #:nodoc:
+        setups.values.any? { |setup| setup.nested_setups.any? }
+      end
+
+      # Returns true when one of the given classes, or a subclass of one,
+      # declares a nested association.
+      def nested_under?(classes) #:nodoc:
+        setups.values.any? do |setup|
+          next false if setup.nested_setups.empty?
+          clazz = begin
+            setup.clazz
+          rescue NameError
+            next false
+          end
+          classes.any? { |type| clazz <= type }
+        end
+      end
+
       protected
 
       # 
@@ -454,6 +482,7 @@ module Sunspot
       def setups
         @setups ||= {}
       end
+
     end
   end
 end
