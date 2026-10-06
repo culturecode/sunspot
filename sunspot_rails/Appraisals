@@ -21,6 +21,7 @@ if Gem::Version.new('3.0.0') <= ruby_version && ruby_version < Gem::Version.new(
       gem 'sunspot', path: File.expand_path('sunspot', ENV['SUNSPOT_LIB_HOME'])
       gem 'sunspot_solr', path: File.expand_path('sunspot_solr', ENV['SUNSPOT_LIB_HOME'])
       gem 'rails', "~> #{rails_version}"
+      gem 'json', '< 3' # Under json 3, these Rails versions' to_json raises "unknown keyword: quirks_mode"
       gem 'sprockets', '~> 3.0'
       gem 'progress_bar', '~> 1.0.5', require: false
       gem 'sqlite3', '~> 1.4.0'
