@@ -11,10 +11,7 @@ module Sunspot
       end
 
       def to_params
-        super.tap do |params|
-          params[:"facet.field"] = [field_name_with_local_params]
-          params[:"facet.matches"] = @options[:matches] if @options[:matches]
-        end
+        super.merge(:"facet.field" => [field_name_with_local_params])
       end
 
       private
@@ -38,7 +35,7 @@ module Sunspot
           end
           "{!#{pairs.join(' ')}}#{@field.indexed_name}"
         end
-      end
+      end 
     end
   end
 end

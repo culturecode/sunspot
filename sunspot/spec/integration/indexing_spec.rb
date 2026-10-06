@@ -8,6 +8,7 @@ describe 'indexing' do
   end
 
   it 'should correctly remove by model instance' do
+    Sunspot.remove_all!
     post = Post.new(:title => 'test post')
     Sunspot.index!(post)
     Sunspot.remove!(post)
@@ -15,6 +16,7 @@ describe 'indexing' do
   end
 
   it 'should correctly delete by ID' do
+    Sunspot.remove_all!
     post = Post.new(:title => 'test post')
     Sunspot.index!(post)
     Sunspot.remove_by_id!(Post, post.id)

@@ -1,17 +1,20 @@
 require 'sunspot/version'
 
-rdoc_task =
+# Try to load RDoc task - newer versions use 'rdoc/task', older versions use 'rake/rdoctask'
+rdoc_task = nil
+begin
+  require 'rdoc/task'
+  rdoc_task = RDoc::Task
+rescue LoadError
+  # Fallback to older API for compatibility
   begin
-    require 'rdoc/task'
-    RDoc::Task
+    require 'rake/rdoctask'
+    rdoc_task = Rake::RDocTask
   rescue LoadError
-    begin
-      require 'rake/rdoctask'
-      Rake::RDocTask
-    rescue
-      nil
-    end
+    # RDoc is not available - skip rdoc tasks
+    rdoc_task = nil
   end
+end
 
 if rdoc_task
   rdoc_task.new(:doc) do |rdoc|

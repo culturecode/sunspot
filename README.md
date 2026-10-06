@@ -498,13 +498,20 @@ search.facet(:author_id).rows.each do |facet|
 end
 ```
 
-You can also filter facets using a regular expression. Requires Solr 7.7 or higher for `facet.matches` faceting support.
+Facet values can be restricted to those matching a regular expression. Requires Solr 7.7 or
+higher.
+
 ```ruby
-# Posts that insensitive case match 'Lord' followed by 'Rings' anywhere in the post title
+# Counts for post titles mentioning 'Lord' before 'Rings', in any case
 search = Post.search do
-  facet :title, matches: '(?i)Lord.*Rings'
+  facet :title, matches: '(?i).*Lord.*Rings.*'
 end
 ```
+
+The pattern is a Java regular expression matched against the whole indexed value, so `Rings`
+matches the value `Rings` and not the value `Lord of the Rings`. Wrap the pattern in `.*` to
+match anywhere within a value. Only the facet the option is given to is restricted; other
+facets in the same search return all of their values.
 
 #### Query Facets
 
@@ -1129,7 +1136,7 @@ node contains replicas of all shards in the cluster. If you have 4 shards on sep
 nodes each of these nodes should have 4 replicas (one replica of each shard).
 
 More information and usage examples could be found here:
-https://lucene.apache.org/solr/guide/6_6/shards-and-indexing-data-in-solrcloud.html
+https://lucene.apache.org/solr/guide/6_6/shards-and-indexing-data-in-solrcloud.html  
 
 ### Highlighting
 
@@ -1513,16 +1520,20 @@ part of the `save` callbacks.
 There are a number of ways to index manually within Ruby:
 ```ruby
 # On a class itself
-Person.reindex
+Person.reindex # Reindexes every record in the scope
 Sunspot.commit # or commit(true) for a soft commit (Solr4)
+Person.solr_remove_all_from_index # Eliminates Person record from the index, including records that no longer exist
 
 # On mixed objects
 Sunspot.index [post1, item2]
 Sunspot.index person3
 Sunspot.commit # or commit(true) for a soft commit (Solr4)
+Sunspot.remove_all!(User, Person)
 
 # With autocommit
 Sunspot.index! [post1, item2, person3]
+Person.solr_remove_all_from_index!
+Sunspot.remove_all!(User)
 ```
 
 If you make a change to the object's "schema" (code in the `searchable` block),

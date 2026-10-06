@@ -1,5 +1,9 @@
 ENV["RAILS_ENV"] ||= 'test'
 
+# Load these gems before Rails to avoid Ruby 3.0+ compatibility issues
+require 'ostruct'
+require 'logger'
+
 require File.expand_path('config/environment', File.expand_path('../rails_app', __FILE__))
 require File.expand_path('../../lib/sunspot_rails', __FILE__)
 require 'rspec/rails'
