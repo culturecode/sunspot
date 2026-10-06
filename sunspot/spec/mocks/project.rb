@@ -93,3 +93,25 @@ Sunspot.setup(Vehicle) do
     string :name
   end
 end
+
+# A subclass with no setup of its own, which inherits Project's
+class Spinoff < Project
+end
+
+# An unrelated class whose milestones declare a field Project's don't, and
+# one Project's declare with another type
+class Gadget < MockRecord
+  attr_accessor :name
+  attr_writer :milestones
+
+  def milestones
+    @milestones ||= []
+  end
+end
+
+Sunspot.setup(Gadget) do
+  nested :milestones do
+    string(:only_here) { 'yes' }
+    integer(:started_at) { 1 }
+  end
+end

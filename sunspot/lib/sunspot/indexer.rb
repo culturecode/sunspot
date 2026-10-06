@@ -22,9 +22,7 @@ module Sunspot
     # model<Object>:: the model to index
     #
     def add(model)
-      models = Util.Array(model)
-      documents = models.map { |m| prepare_full_update(m) }
-      remove_replaced_blocks(models, documents)
+      documents = Util.Array(model).map { |m| prepare_full_update(m) }
       add_batch_documents(documents)
     end
 
@@ -46,6 +44,10 @@ module Sunspot
     # 
     # Remove the given model from the Solr index
     #
+    # REMOVE_BLOCKS_BATCH_SIZE keeps each +_root_+ delete query under Solr's
+    # default limit of 1024 boolean clauses.
+    REMOVE_BLOCKS_BATCH_SIZE = 500
+
     def remove(*models)
       ids = models.map { |model| Adapters::InstanceAdapter.adapt(model).index_id }
       @connection.delete_by_id(ids)
@@ -185,31 +187,9 @@ module Sunspot
     # children.
     def nested_class_name?(class_name)
       nested?(Util.full_const_get(class_name))
-    rescue NameError
+    rescue NameError => e
+      raise if e.is_a?(NoMethodError)
       Setup.nested_anywhere?
-    end
-
-    #
-    # Deletes the blocks the given models' documents replace. Solr before 8
-    # replaces a document with children by +_root_+ and one without by +id+,
-    # so reindexing a parent whose children went from some to none, or from
-    # none to some, would leave the old children or the old parent behind.
-    # Deleting a parent with children by id, and one without by +_root_+,
-    # clears either case.
-    #
-    def remove_replaced_blocks(models, documents)
-      with_children, without_children = [], []
-      models.each_with_index do |model, i|
-        next unless nested?(model.class)
-        id = documents[i].field_by_name(:id).value
-        (child_documents?(documents[i]) ? with_children : without_children) << id
-      end
-      @connection.delete_by_id(with_children) if with_children.any?
-      remove_blocks(without_children)
-    end
-
-    def child_documents?(document)
-      defined?(RSolr::Document::CHILD_DOCUMENT_KEY) && document.fields_by_name(RSolr::Document::CHILD_DOCUMENT_KEY).any?
     end
 
     #
@@ -219,8 +199,9 @@ module Sunspot
     # parent follows it in the index.
     #
     def remove_blocks(ids)
-      return if ids.empty?
-      @connection.delete_by_query("_root_:(#{ids.map { |id| %Q("#{Util.escape(id)}") }.join(' OR ')})")
+      ids.each_slice(REMOVE_BLOCKS_BATCH_SIZE) do |batch|
+        @connection.delete_by_query("_root_:(#{batch.map { |id| %Q("#{Util.escape(id)}") }.join(' OR ')})")
+      end
     end
 
     #

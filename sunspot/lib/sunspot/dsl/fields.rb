@@ -82,6 +82,12 @@ module Sunspot
       # be reindexed whenever its children change. A class with nested
       # associations cannot be atomically updated.
       #
+      # Reindexing a parent replaces its old block only on Solr 8 or later.
+      # Solr before 8 replaces a document with children by +_root_+ and one
+      # without by +id+, so a parent whose children went from some to none
+      # keeps its old children, and one whose children went from none to some
+      # is indexed twice. Remove such a parent before reindexing it there.
+      #
       # The block cannot declare a document boost, an id prefix, a join, or a
       # nested association of its own. Each raises ArgumentError.
       #

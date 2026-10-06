@@ -80,11 +80,28 @@ module Sunspot
     end
 
     #
-    # Returns the PATH_FIELD values of the given association's children: one
-    # here, one per searched type that declares it on a CompositeSetup.
+    # Returns every NestedSetup a search of this class has to cover for the
+    # given association: its own, inherited if need be, and those of
+    # registered subclasses that declare the association again. Raises
+    # UnrecognizedFieldError when this class has no such association.
     #
-    def nested_paths(name)
-      [nested_setup(name).path]
+    def nested_setups_named(name)
+      own = nested_setup(name)
+      redeclared = Setup.all.map do |setup|
+        next if setup.equal?(self)
+        subclass = begin
+          setup.clazz <= clazz
+        rescue NameError
+          false
+        end
+        setup.declared_nested_setup(name) if subclass
+      end
+      [own, *redeclared.compact].uniq
+    end
+
+    # Returns the NestedSetup declared on this class itself, not inherited.
+    def declared_nested_setup(name)
+      @nested_setups[name.to_sym]
     end
 
     # 
@@ -430,6 +447,11 @@ module Sunspot
         setups[clazz.name.to_sym] || self.for(clazz.superclass) if clazz
       end
 
+      # Returns every class's setup.
+      def all #:nodoc:
+        setups.values
+      end
+
       # Returns true when any class's setup declares a nested association.
       def nested_anywhere? #:nodoc:
         setups.values.any? { |setup| setup.nested_setups.any? }
@@ -438,6 +460,7 @@ module Sunspot
       # Returns true when one of the given classes, or a subclass of one,
       # declares a nested association.
       def nested_under?(classes) #:nodoc:
+        return true if classes.any? { |type| (setup = self.for(type)) && setup.nested_setups.any? }
         setups.values.any? do |setup|
           next false if setup.nested_setups.empty?
           clazz = begin
@@ -482,7 +505,6 @@ module Sunspot
       def setups
         @setups ||= {}
       end
-
     end
   end
 end

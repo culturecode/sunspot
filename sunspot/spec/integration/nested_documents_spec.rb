@@ -17,6 +17,12 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
 
   let(:q1) { Time.utc(2026, 1, 1)...Time.utc(2026, 4, 1) }
 
+  # Solr before 8 replaces a document with children by _root_ and one without by id
+  def skip_before_solr_8
+    version = Sunspot.session.send(:connection).get('admin/system')['lucene']['solr-spec-version']
+    skip "Solr #{version} doesn't replace a block whose children went from some to none or none to some" if version.to_i < 8
+  end
+
   before :each do
     Sunspot.remove_all!
 
@@ -126,6 +132,7 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
     end
 
     it 'removes every child when a parent is reindexed with none' do
+      skip_before_solr_8
       @designed_earlier.milestones = []
       Sunspot.index!(@designed_earlier)
 
@@ -134,6 +141,7 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
     end
 
     it 'replaces a parent that had no children when it is reindexed with some' do
+      skip_before_solr_8
       @without_milestones.milestones = [milestone('launch', Time.utc(2026, 3, 1))]
       Sunspot.index!(@without_milestones)
 
@@ -173,6 +181,16 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
       expect(search {}).to match_array([@designed_in_q1, @without_milestones])
     end
 
+    it 'removes the children of a subclass that has no setup of its own' do
+      Sunspot.index!(Spinoff.new(:name => 'spun off', :milestones => [milestone('design', Time.utc(2026, 2, 1))]))
+      Sunspot.remove_all!(Spinoff)
+      expect(solr_count('id:Spinoff*')).to eq(0)
+
+      Sunspot.index!(Spinoff.new(:name => 'spun off', :milestones => [milestone('design', Time.utc(2026, 2, 1))]))
+      Sunspot.remove!(Spinoff) { with :name, 'spun off' }
+      expect(solr_count('id:Spinoff*')).to eq(0)
+    end
+
     it 'removes every child when removing the class, and nothing else' do
       Sunspot.remove_all!(Project)
       expect(children).to eq(0)
@@ -199,6 +217,20 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
         results = Sunspot.search(*types) { with_child(:milestones) { with :name, 'design' } }.results
         expect(results).to match_array([@designed_in_q1, @designed_earlier, program])
       end
+    end
+
+    it 'resolves a child field declared by any searched class, whatever their order' do
+      gadget = Gadget.new(:name => 'gadget', :milestones => [milestone('design', Time.utc(2026, 2, 1))])
+      Sunspot.index!(gadget)
+
+      [[Project, Gadget], [Gadget, Project]].each do |types|
+        expect(Sunspot.search(*types) { with_child(:milestones) { with :only_here, 'yes' } }.results).to eq([gadget])
+        expect(Sunspot.search(*types) { with_child(:milestones) { with :name, 'design' } }.results).to match_array([@designed_in_q1, @designed_earlier])
+      end
+    end
+
+    it 'rejects a child field the searched classes declare differently' do
+      expect { Sunspot.search(Project, Gadget) { with_child(:milestones) { with(:started_at).greater_than(0) } } }.to raise_error(Sunspot::UnrecognizedFieldError)
     end
 
     it 'removes the children of a nested subclass when removing through its superclass' do

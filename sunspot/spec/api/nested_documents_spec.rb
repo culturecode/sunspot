@@ -86,17 +86,6 @@ describe 'nested documents' do
       expect(indexed_project.field_by_name(:name_s).value).to eq('Bridge')
     end
 
-    it 'deletes the previous block by id before indexing a parent with children' do
-      indexed_project
-      expect(connection).to have_delete("Project #{project.id}")
-    end
-
-    it 'deletes the previous block by _root_ before indexing a parent without children' do
-      empty = Project.new(:name => 'Empty')
-      session.index(empty)
-      expect(connection).to have_delete_by_query(%Q(_root_:("Project\\ #{empty.id}")))
-    end
-
     it 'sends no children for an empty association' do
       session.index(Project.new(:name => 'Empty'))
       expect(children(connection.adds.last.first)).to be_empty
@@ -215,6 +204,11 @@ describe 'nested documents' do
       session.remove(project)
       expect(connection).to have_delete("Project #{project.id}")
       expect(connection).to have_delete_by_query(%Q(_root_:("Project\\ #{project.id}")))
+    end
+
+    it 'splits the block deletes to stay under the boolean clause limit' do
+      session.remove_by_id(Project, (1..1100).to_a)
+      expect(connection.deletes_by_query.length).to eq(3)
     end
 
     it 'removes the whole block when removing by id' do
