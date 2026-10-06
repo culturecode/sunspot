@@ -88,6 +88,12 @@ module Sunspot
       # keeps its old children, and one whose children went from none to some
       # is indexed twice. Remove such a parent before reindexing it there.
       #
+      # A subclass that declares an association again replaces its fields
+      # rather than adding to them: its children are indexed with only the
+      # fields of its own block. They keep the superclass's association
+      # marker, so a search of the superclass still reaches them, but only
+      # through fields both blocks declare the same way.
+      #
       # The block cannot declare a document boost, an id prefix, a join, or a
       # nested association of its own. Each raises ArgumentError.
       #
