@@ -1081,7 +1081,7 @@ The schema needs a `_root_` field with the same type as `id`. The bundled config
 <field name="_root_" type="string" indexed="true" stored="false" multiValued="false"/>
 ```
 
-On Solr 8 and above, adding `_root_` to an index that already holds documents changes how Solr replaces them: documents indexed before the field existed are not replaced when reindexed, so each one, of any class, is indexed twice. Reindex every class from scratch (`rake sunspot:reindex`) right after adding the field.
+On Solr 8 and above, once the schema has `_root_`, Solr replaces a document by its `_root_` value. Documents indexed before the field was added have none, so reindexing one adds a new copy beside the old one, and later reindexes replace only the new copy. The old copies stay until they're deleted, so clear and reindex every class (`rake sunspot:reindex`, which deletes each class's documents first) right after adding the field.
 
 #### Things to know
 
