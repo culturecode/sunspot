@@ -104,7 +104,12 @@ module Sunspot
       # declared with DSL::Fields#nested.
       #
       # The block takes the same restrictions as a scope, with field names
-      # referring to the child's fields.
+      # referring to the child's fields. Restricting by instance, as in
+      # <tt>with(record)</tt>, raises ArgumentError, and a nested #with_child
+      # raises UnrecognizedFieldError.
+      #
+      # In a search of several classes, the block matches the children of
+      # every searched class that declares the association.
       #
       # ==== Example
       #
@@ -257,7 +262,7 @@ module Sunspot
           end
         else # args are instances
           if @setup.is_a?(NestedSetup) || @setup.is_a?(CompositeNestedSetup)
-            raise ArgumentError, "Instance restrictions are not supported inside with_child or without_child; restrict on the child's fields instead"
+            raise ArgumentError, "Instance restrictions are not supported inside with_child or without_child. Restrict on the child's fields instead"
           end
           @scope.add_restriction(
             negated,

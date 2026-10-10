@@ -200,7 +200,7 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
   end
 
   describe 'an association read through another method' do
-    it 'indexes and finds the children :using names' do
+    it 'indexes and finds the children the :using method returns' do
       plan = Plan.new(:name => 'plan', :milestones => [milestone('design', Time.utc(2026, 2, 1))])
       Sunspot.index!(plan)
 

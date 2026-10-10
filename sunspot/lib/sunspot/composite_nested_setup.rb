@@ -29,7 +29,8 @@ module Sunspot
     end
 
     # Returns the text fields with the given name, one per distinct Solr field.
-    # TextFieldSetup raises when there is more than one.
+    # Raises UnrecognizedFieldError when no setup declares it. TextFieldSetup
+    # raises when there is more than one.
     def text_fields(field_name)
       fields = @nested_setups.flat_map do |setup|
         begin
@@ -47,6 +48,10 @@ module Sunspot
       @nested_setups.map(&:path).uniq
     end
 
+    # Returns the dynamic field factory with the given base name. Unlike
+    # #field, it requires every setup to declare it, as CompositeSetup does
+    # for parents' dynamic fields. Raises UnrecognizedFieldError when one
+    # doesn't, or when they build different Solr fields.
     def dynamic_field_factory(field_name)
       factories = @nested_setups.map { |setup| setup.dynamic_field_factory(field_name) }
       return factories.first if factories.map { |factory| factory.build('x').indexed_name }.uniq.one?

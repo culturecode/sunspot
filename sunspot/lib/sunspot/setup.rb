@@ -54,13 +54,18 @@ module Sunspot
     #
     # Declares an association whose records are indexed as child documents of
     # this class's documents. Returns the NestedSetup the block's fields are
-    # added to. Declaring the same association again on this class adds the
-    # block's fields to it, as repeated setup blocks add parent fields.
+    # added to.
+    #
+    # Declaring the same association again on this class adds the block's
+    # fields to it, as repeated setup blocks add parent fields, and keeps the
+    # first declaration's options. A subclass that declares an inherited
+    # association gets a NestedSetup of its own, with only its block's fields
+    # and its superclass's path.
     #
     def add_nested(name, options = {}, &block)
       Setup.nested_declared!
-      # Reading this class's nested setups copies inherited entries into
-      # @nested_setups, so only one this class declared itself is added to.
+      # @nested_setups also holds entries get_inheritable_hash copied from the
+      # superclass, so only a NestedSetup this class created is added to.
       existing = @nested_setups[name.to_sym]
       nested_setup = existing && existing.parent_setup.equal?(self) ? existing : begin
         inherited = parent && parent.get_inheritable_hash(:nested_setups)[name.to_sym]
@@ -88,9 +93,9 @@ module Sunspot
 
     #
     # Returns the NestedSetups a search of this class covers for the given
-    # association: its own, inherited if need be. A subclass that declares the
-    # association again keeps its path, so its children match too. Raises
-    # UnrecognizedFieldError when this class has no such association.
+    # association: its own, inherited if need be, as a one-element array to
+    # match CompositeSetup#nested_setups_named. Raises UnrecognizedFieldError
+    # when this class has no such association.
     #
     def nested_setups_named(name)
       [nested_setup(name)]
@@ -439,13 +444,15 @@ module Sunspot
         setups[clazz.name.to_sym] || self.for(clazz.superclass) if clazz
       end
 
-      # Returns true when any class's setup declares a nested association.
+      # Returns true when any class's setup has a nested association. A setup
+      # whose class no longer resolves counts as having none.
       def nested_anywhere? #:nodoc:
         nested_declared? && setups.values.any? { |setup| ignoring_missing_constants { setup.nested_setups.any? } }
       end
 
-      # Records that some class has declared a nested association, so the
-      # nested checks in removal can return at once in an app that never does.
+      # Records that a class has declared a nested association. Until one has,
+      # #nested_anywhere? and #nested_under? return false without scanning
+      # the registered setups.
       def nested_declared! #:nodoc:
         @nested_declared = true
       end
@@ -454,8 +461,9 @@ module Sunspot
         !!@nested_declared
       end
 
-      # Returns true when one of the given classes, or a subclass of one,
-      # declares a nested association.
+      # Returns true when one of the given classes, or a registered subclass of
+      # one, has a nested association, declared or inherited. A setup whose
+      # class no longer resolves counts as having none.
       def nested_under?(classes) #:nodoc:
         return false unless nested_declared?
         return true if classes.any? { |type| (setup = self.for(type)) && setup.nested_setups.any? }
@@ -464,9 +472,9 @@ module Sunspot
         end
       end
 
-      # Yields, returning false when a setup's class, or one of its ancestors,
-      # no longer resolves to a constant, as after a test removes a stubbed
-      # class.
+      # Returns the block's result, or false when a setup's class, or one of
+      # its ancestors, no longer resolves to a constant, as after a test
+      # removes a stubbed class. A NoMethodError still raises.
       def ignoring_missing_constants #:nodoc:
         yield
       rescue NameError => e

@@ -79,8 +79,8 @@ module Sunspot
       # that a single child must meet together.
       #
       # Children are indexed only as part of their parent, so the parent must
-      # be reindexed whenever its children change. A class with nested
-      # associations cannot be atomically updated.
+      # be reindexed whenever its children change. Atomic updates to a class
+      # with nested associations raise ArgumentError.
       #
       # Reindexing a parent replaces its old block only on Solr 8 or later.
       # Solr before 8 replaces a document with children by +_root_+ and one
@@ -88,11 +88,12 @@ module Sunspot
       # keeps its old children, and one whose children went from none to some
       # is indexed twice. Remove such a parent before reindexing it there.
       #
-      # A subclass that declares an association again replaces its fields
-      # rather than adding to them: its children are indexed with only the
-      # fields of its own block. They keep the superclass's association
-      # marker, so a search of the superclass still reaches them, but only
-      # through fields both blocks declare the same way.
+      # Declaring an association again in the same class adds the block's
+      # fields to it. A subclass that declares an inherited association again
+      # replaces its fields: its children are indexed with only the fields of
+      # its own block. They keep the superclass's association marker, so a
+      # search of the superclass still reaches them, but only through fields
+      # both blocks declare the same way.
       #
       # The block cannot declare a document boost, an id prefix, a join, or a
       # nested association of its own. Each raises ArgumentError.

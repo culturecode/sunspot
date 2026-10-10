@@ -1086,11 +1086,11 @@ Adding `_root_` to a core that already holds documents needs a full reindex of e
 #### Things to know
 
 * Children are indexed only as part of their parent, so reindex the parent whenever its children change.
-* Reindexing a parent replaces its whole block on Solr 8 and above. On earlier versions, including the Solr that `sunspot_solr` bundles, a parent whose children went from some to none keeps its old children, and one whose children went from none to some is indexed twice; remove it before reindexing it there.
+* Reindexing a parent replaces its whole block on Solr 8 and above. On earlier versions, including the Solr that `sunspot_solr` bundles, a parent whose children went from some to none keeps its old children, and one whose children went from none to some is indexed twice. Remove such a parent before reindexing it there.
 * Atomic updates raise `ArgumentError` for a class with nested associations. Index the whole record instead.
-* Removing a record of a nested class also sends a delete-by-query on `_root_`, because Solr before 8 leaves the children behind on a delete by id. Solr 8 and above delete them anyway, so there it's an extra, slower request per removal.
+* Removing a record of a nested class also sends a delete-by-query on `_root_`, because Solr before 8 leaves the children behind on a delete by id. Solr 8 and above delete them anyway, so there it's an extra request per removal.
 * A nested block can't declare a boost, an id prefix, a join or a nested association of its own, and `with(record)` / `without(record)` inside `with_child` raise `ArgumentError`.
-* A subclass that declares the association again replaces its fields rather than adding to them. A search of the superclass still reaches its children, but only through fields both declare the same way.
+* Declaring an association again in the same class adds to its fields. A subclass that declares an inherited association again replaces its fields. A search of the superclass still reaches the subclass's children, but only through fields both declare the same way.
 * A child document's id is `"<parent id>/<association>/<child id>"`, where the child id is its Sunspot index id, or its position in the association when its class has no Sunspot adapter. Children carry a `_sunspot_nested_path_s` field naming their association and no `type`, so searches for the parent class never return them.
 
 ### Composite ID

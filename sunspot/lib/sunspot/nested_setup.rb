@@ -32,17 +32,18 @@ module Sunspot
 
     #
     # Returns the value stored in PATH_FIELD on every child of this
-    # association: the declaring class and the association name, such as
-    # "Project.milestones".
+    # association: the class that first declared it and the association name,
+    # such as "Project.milestones". A subclass that declares the association
+    # again keeps its superclass's path.
     #
     def path
       @path
     end
 
-    # Returns the model's children, each once, so an association that lists a
-    # record twice doesn't give two child documents the same id. Children
-    # that compare equal, such as two Structs with the same attributes, count
-    # as one.
+    # Returns the model's non-nil children, each once, so an association that
+    # lists a record twice doesn't give two child documents the same id.
+    # Children that compare equal, such as two Structs with the same
+    # attributes, count as one.
     def children_for(model)
       Util.Array(@children_extractor.value_for(model)).compact.uniq
     end

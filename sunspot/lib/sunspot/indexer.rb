@@ -137,13 +137,13 @@ module Sunspot
 
     #
     # Adds a child document to +document+ for each of the model's children in
-    # the association, so Solr indexes the parent and its children as one
-    # block. Raises NestedDocumentsNotSupportedError when there are children
-    # and RSolr cannot send child documents.
+    # +nested_setup+'s association, so Solr indexes the parent and its
+    # children as one block. Raises NestedDocumentsNotSupportedError when there
+    # are children and RSolr cannot send child documents.
     #
     # A child's id is the parent's id followed by the association name and
-    # #child_key, so it is unique within the index and carries the parent's
-    # id prefix.
+    # #child_key, such as <tt>"Project 1/milestones/Milestone 7"</tt>, so it is
+    # unique within the index and carries the parent's id prefix.
     #
     def add_child_documents(document, nested_setup, model)
       children = nested_setup.children_for(model)
@@ -193,10 +193,11 @@ module Sunspot
     end
 
     #
-    # Deletes every document in the blocks rooted at the given ids. Solr 9
-    # deletes a parent's children along with it on a delete by id, and Solr 6
-    # leaves them in the index. A child left behind is joined to whichever
-    # parent follows it in the index.
+    # Deletes every document in the blocks rooted at the given ids, by
+    # +_root_+, in batches of REMOVE_BLOCKS_BATCH_SIZE. Solr 8.11 and 9 delete a
+    # parent's children along with it on a delete by id, and Solr 6 leaves
+    # them in the index. A child left behind is joined to whichever parent
+    # follows it in the index.
     #
     def remove_blocks(ids)
       ids.each_slice(REMOVE_BLOCKS_BATCH_SIZE) do |batch|
@@ -207,11 +208,15 @@ module Sunspot
     #
     # Returns a query matching the documents +query+ matches and, when one of
     # +classes+ or a subclass of one has nested associations, their children
-    # too. Solr evaluates it once, so a delete by it removes the parents and
-    # children together, and a parent condition that refers to children still
-    # matches the parents. The block mask is every document that is not a
-    # child, so documents of other classes indexed between blocks are never
-    # matched as children.
+    # too. Returns +query+ unchanged otherwise.
+    #
+    #   with_children("type:Project", [Project])
+    #   # => (type:Project) OR _query_:"{!child of=\"*:* -_sunspot_nested_path_s:[* TO *]\" v=\"type:Project\"}"
+    #
+    # It is one query, so a delete by it removes the parents and their
+    # children together. A +query+ with a DSL::Scope#with_child condition
+    # still matches its parents, since the children it refers to are deleted
+    # by the same query.
     #
     def with_children(query, classes)
       return query unless Setup.nested_under?(classes)
