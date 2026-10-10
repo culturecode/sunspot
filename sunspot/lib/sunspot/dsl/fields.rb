@@ -71,6 +71,54 @@ module Sunspot
         @setup.add_id_prefix(attr_name, &block)
       end
 
+      #
+      # Indexes the records of an association as child documents of this
+      # class's documents, in the same Solr block. Fields declared in the block
+      # are indexed on each child, and a field's block is evaluated against the
+      # child record. Use DSL::Scope#with_child to find parents by conditions
+      # that a single child must meet together.
+      #
+      # Children are indexed only as part of their parent, so the parent must
+      # be reindexed whenever its children change. Atomic updates to a class
+      # with nested associations raise ArgumentError.
+      #
+      # Reindexing a parent replaces its old block only on Solr 8 or later.
+      # Solr before 8 replaces a document with children by +_root_+ and one
+      # without by +id+, so a parent whose children went from some to none
+      # keeps its old children, and one whose children went from none to some
+      # is indexed twice. Remove such a parent before reindexing it there.
+      #
+      # Declaring an association again in the same class adds the block's
+      # fields to it. A subclass that declares an inherited association again
+      # replaces its fields: its children are indexed with only the fields of
+      # its own block. They keep the superclass's association marker, so a
+      # search of the superclass still reaches them, but only through fields
+      # both blocks declare the same way.
+      #
+      # The block cannot declare a document boost, an id prefix, a join, or a
+      # nested association of its own. Each raises ArgumentError.
+      #
+      # ==== Parameters
+      #
+      # name<Symbol>:: The association, called on the parent to get the children
+      #
+      # ==== Options
+      #
+      # :using<Symbol>:: Method to call on the parent instead of +name+
+      #
+      # ==== Example
+      #
+      #   Sunspot.setup(Project) do
+      #     nested :milestones do
+      #       string :name
+      #       time :started_at
+      #     end
+      #   end
+      #
+      def nested(name, options = {}, &block)
+        @setup.add_nested(name, options, &block)
+      end
+
       # method_missing is used to provide access to typed fields, because
       # developers should be able to add new Sunspot::Type implementations
       # dynamically and have them recognized inside the Fields DSL. Like #text,
@@ -117,6 +165,29 @@ module Sunspot
         else
           @setup.add_field_factory(name, type, options, &block)
         end
+      end
+    end
+
+    #
+    # The fields DSL inside a DSL::Fields#nested block. Rejects document
+    # boosts, id prefixes, joins, and nested associations with ArgumentError.
+    #
+    class NestedFields < Fields #:nodoc:
+      def boost(*)
+        raise ArgumentError, "Document boosts are not supported on nested documents"
+      end
+
+      def id_prefix(*)
+        raise ArgumentError, "ID prefixes are not supported on nested documents, which take their parent's"
+      end
+
+      def nested(*)
+        raise ArgumentError, "Nested documents cannot have nested documents of their own"
+      end
+
+      def method_missing(method, *args, &block)
+        raise ArgumentError, "Joins are not supported on nested documents" if method.to_s == 'join'
+        super
       end
     end
   end

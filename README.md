@@ -1028,6 +1028,71 @@ end
 # qRss91753840: _query_:"{!field f=type}Rss"+_query_:"{!edismax qf='keywords_text'}keyword3"
 ```
 
+### Nested Documents (Block Joins)
+
+**Solr 8 and above recommended; requires RSolr 2**
+
+Nested documents let a search require that a *single* associated record meet several conditions together. Indexing an association's fields as multivalued fields on the parent loses which value came from which record: a project with one milestone named "design" and another started in Q1 would match "a design milestone started in Q1". `nested` indexes each record of an association as a Solr child document inside its parent's block, and `with_child` / `without_child` search them with Solr's [block join query parsers](https://solr.apache.org/guide/solr/latest/query-guide/block-join-query-parser.html).
+
+```ruby
+class Project < ActiveRecord::Base
+  has_many :milestones
+
+  searchable do
+    string :status
+
+    nested :milestones do
+      string :name
+      time :started_at
+      string(:owner_names, :multiple => true) { owners.map(&:name) }
+    end
+  end
+end
+
+# Projects with a design milestone started in Q1. One milestone has to match
+# both conditions.
+Project.search do
+  with_child :milestones do
+    with :name, 'design'
+    with(:started_at).between(Time.utc(2026, 1, 1)...Time.utc(2026, 4, 1))
+  end
+end
+
+# Projects with no design milestone, including projects with no milestones
+Project.search do
+  without_child :milestones do
+    with :name, 'design'
+  end
+end
+
+# Projects with any milestone at all
+Project.search { with_child :milestones }
+```
+
+The block inside `with_child` / `without_child` takes the same restrictions as a search, including `without`, `any_of`, `all_of`, `dynamic` and `text_fields`, with field names referring to the children's fields. `with_child` combines with restrictions on the parent and works inside `any_of`, query facets and `remove`.
+
+Searching several classes covers each class that declares the association, and a child field resolves as parent fields do: when every class declaring it agrees on its type.
+
+#### Schema
+
+The schema needs a `_root_` field with the same type as `id`. The bundled configset has one.
+
+```xml
+<field name="_root_" type="string" indexed="true" stored="false" multiValued="false"/>
+```
+
+Adding `_root_` to a core that already holds documents needs a full reindex of every class on Solr 8 and above; see [Adding `_root_` to an existing core](#adding-_root_-to-an-existing-core).
+
+#### Things to know
+
+* Children are indexed only as part of their parent, so reindex the parent whenever its children change.
+* Reindexing a parent replaces its whole block on Solr 8 and above. On earlier versions, including the Solr that `sunspot_solr` bundles, a parent whose children went from some to none keeps its old children, and one whose children went from none to some is indexed twice. Remove such a parent before reindexing it there.
+* Atomic updates raise `ArgumentError` for a class with nested associations. Index the whole record instead.
+* Removing a record of a nested class also sends a delete-by-query on `_root_`, because Solr before 8 leaves the children behind on a delete by id. Solr 8 and above delete them anyway, so there it's an extra request per removal.
+* A nested block can't declare a boost, an id prefix, a join or a nested association of its own, and `with(record)` / `without(record)` inside `with_child` raise `ArgumentError`.
+* Declaring an association again in the same class adds to its fields. A subclass that declares an inherited association again replaces its fields. A search of the superclass still reaches the subclass's children, but only through fields both declare the same way.
+* A child document's id is `"<parent id>/<association>/<child id>"`, where the child id is its Sunspot index id, or its position in the association when its class has no Sunspot adapter. Children carry a `_sunspot_nested_path_s` field naming their association and no `type`, so searches for the parent class never return them.
+
 ### Composite ID
 
 **SolrCloud only**
@@ -1677,6 +1742,10 @@ solr:
 
 where the `./solr/init` directory contains a shell script that does any initial setup like downloading and unzipping your cores.
 In both cases, the solr images by default expects cores to be placed in `/opt/solr/server/solr/mycores`.
+
+### Adding `_root_` to an existing core
+
+The bundled configset and `examples/solr7_core` define a `_root_` field, which [nested documents](#nested-documents-block-joins) need. If you bring an existing core's schema up to date with them on Solr 8 or above, the change affects every class, nested or not. Once the schema has `_root_`, Solr replaces and deletes documents by their `_root_` value, and documents indexed before the field was added have none. Reindexing one of them adds a new copy beside the old one, later reindexes replace only the new copy, and removing it by id leaves the old copy in place. The old copies stay until they're deleted, so clear and reindex every class (`rake sunspot:reindex`, which deletes each class's documents first) right after adding the field.
 
 ## Development
 

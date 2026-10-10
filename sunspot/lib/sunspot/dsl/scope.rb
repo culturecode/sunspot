@@ -98,6 +98,50 @@ module Sunspot
       end
 
       #
+      # Scope the results to documents with at least one child in the given
+      # association that satisfies every restriction in the block. Without a
+      # block, any child in the association matches. The association is one
+      # declared with DSL::Fields#nested.
+      #
+      # The block takes the same restrictions as a scope, with field names
+      # referring to the child's fields. Restricting by instance, as in
+      # <tt>with(record)</tt>, raises ArgumentError, and a nested #with_child
+      # raises UnrecognizedFieldError.
+      #
+      # In a search of several classes, the block matches the children of
+      # every searched class that declares the association.
+      #
+      # ==== Example
+      #
+      #   Sunspot.search(Project) do
+      #     with_child :milestones do
+      #       with :name, 'design'
+      #       with(:started_at).between(Time.utc(2026, 1, 1)...Time.utc(2026, 4, 1))
+      #     end
+      #   end
+      #
+      def with_child(name, &block)
+        add_block_join(false, name, &block)
+      end
+
+      #
+      # Scope the results to documents with no child in the given association
+      # that satisfies every restriction in the block. Documents with no
+      # children in the association match. Without a block, only those match.
+      #
+      # ==== Example
+      #
+      #   Sunspot.search(Project) do
+      #     without_child :milestones do
+      #       with :name, 'launch'
+      #     end
+      #   end
+      #
+      def without_child(name, &block)
+        add_block_join(true, name, &block)
+      end
+
+      #
       # Create a disjunction, scoping the results to documents that match any
       # of the enclosed restrictions.
       #
@@ -197,6 +241,14 @@ module Sunspot
 
       private
 
+      def add_block_join(negated, name, &block)
+        nested_setups = @setup.nested_setups_named(name)
+        child_setup = nested_setups.one? ? nested_setups.first : CompositeNestedSetup.new(nested_setups)
+        block_join = Sunspot::Query::BlockJoin.new(nested_setups.first, negated, nil, nested_setups.map(&:path).uniq)
+        Util.instance_eval_or_call(Scope.new(block_join.scope, child_setup), &block) if block
+        @scope.add_component(block_join)
+      end
+
       def add_restriction(negated, *args)
         case args.first
         when String, Symbol
@@ -209,6 +261,9 @@ module Sunspot
             DSL::Restriction.new(field, @scope, negated)
           end
         else # args are instances
+          if @setup.is_a?(NestedSetup) || @setup.is_a?(CompositeNestedSetup)
+            raise ArgumentError, "Instance restrictions are not supported inside with_child or without_child. Restrict on the child's fields instead"
+          end
           @scope.add_restriction(
             negated,
             IdField.instance,

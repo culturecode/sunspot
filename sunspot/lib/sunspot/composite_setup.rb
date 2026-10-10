@@ -101,6 +101,40 @@ module Sunspot
       )
     end
 
+    #
+    # Returns the NestedSetup of each enclosed type that declares the given
+    # association. Raises UnrecognizedFieldError when none does.
+    #
+    def nested_setups_named(name)
+      nested_setups = setups.flat_map do |setup|
+        begin
+          setup.nested_setups_named(name)
+        rescue UnrecognizedFieldError
+          []
+        end
+      end.uniq
+      nested_setups.empty? ? [nested_setup(name)] : nested_setups
+    end
+
+    #
+    # Returns the NestedSetup for the given association from the first of the
+    # searched types that declares it. Raises UnrecognizedFieldError when none
+    # does.
+    #
+    def nested_setup(name)
+      setups.each do |setup|
+        begin
+          return setup.nested_setup(name)
+        rescue UnrecognizedFieldError
+          next
+        end
+      end
+      raise(
+        UnrecognizedFieldError,
+        "No nested association configured for #{@types * ', '} with name '#{name}'"
+      )
+    end
+
     # 
     # Collection of all text fields configured for any of the enclosed types.
     #

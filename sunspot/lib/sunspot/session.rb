@@ -145,7 +145,7 @@ module Sunspot
         end
         dsl = DSL::Scope.new(conjunction, setup_for_types(types))
         Util.instance_eval_or_call(dsl, &block)
-        indexer.remove_by_scope(conjunction)
+        indexer.remove_by_scope(conjunction, types)
       else
         objects.flatten!
         @deletes += objects.length
