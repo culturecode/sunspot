@@ -40,7 +40,9 @@ module Sunspot
     end
 
     # Returns the model's children, each once, so an association that lists a
-    # record twice doesn't give two child documents the same id.
+    # record twice doesn't give two child documents the same id. Children
+    # that compare equal, such as two Structs with the same attributes, count
+    # as one.
     def children_for(model)
       Util.Array(@children_extractor.value_for(model)).compact.uniq
     end

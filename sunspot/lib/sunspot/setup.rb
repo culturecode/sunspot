@@ -59,7 +59,10 @@ module Sunspot
     #
     def add_nested(name, options = {}, &block)
       Setup.nested_declared!
-      nested_setup = @nested_setups[name.to_sym] || begin
+      # Reading this class's nested setups copies inherited entries into
+      # @nested_setups, so only one this class declared itself is added to.
+      existing = @nested_setups[name.to_sym]
+      nested_setup = existing && existing.parent_setup.equal?(self) ? existing : begin
         inherited = parent && parent.get_inheritable_hash(:nested_setups)[name.to_sym]
         NestedSetup.new(self, name, options, inherited && inherited.path)
       end

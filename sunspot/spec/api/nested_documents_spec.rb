@@ -128,6 +128,23 @@ describe 'nested documents' do
     end
   end
 
+  describe 'a subclass declaring an association again after its setup has been read' do
+    it "keeps the subclass's fields off the superclass's children" do
+      Object.const_set(:ReadBase, Class.new(MockRecord))
+      Object.const_set(:ReadSub, Class.new(ReadBase))
+      Sunspot.setup(ReadBase) { nested(:kids) { string :name } }
+      Sunspot.setup(ReadSub) { string :title }
+      Sunspot::Setup.for(ReadSub).nested_setups # copies the inherited entry into ReadSub's own table
+      Sunspot.setup(ReadSub) { nested(:kids) { string :only_sub } }
+
+      expect(Sunspot::Setup.for(ReadBase).nested_setup(:kids).fields.map(&:name)).to eq([:name])
+      expect(Sunspot::Setup.for(ReadSub).nested_setup(:kids).fields.map(&:name)).to eq([:only_sub])
+    ensure
+      Object.send(:remove_const, :ReadSub)
+      Object.send(:remove_const, :ReadBase)
+    end
+  end
+
   describe 'querying' do
     it 'finds parents by conditions a single child meets together' do
       session.search(Project) do
