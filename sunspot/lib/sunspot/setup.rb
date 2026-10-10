@@ -54,11 +54,15 @@ module Sunspot
     #
     # Declares an association whose records are indexed as child documents of
     # this class's documents. Returns the NestedSetup the block's fields are
-    # added to.
+    # added to. Declaring the same association again on this class adds the
+    # block's fields to it, as repeated setup blocks add parent fields.
     #
     def add_nested(name, options = {}, &block)
-      inherited = parent && parent.get_inheritable_hash(:nested_setups)[name.to_sym]
-      nested_setup = NestedSetup.new(self, name, options, inherited && inherited.path)
+      Setup.nested_declared!
+      nested_setup = @nested_setups[name.to_sym] || begin
+        inherited = parent && parent.get_inheritable_hash(:nested_setups)[name.to_sym]
+        NestedSetup.new(self, name, options, inherited && inherited.path)
+      end
       nested_setup.setup(&block) if block
       @nested_setups[nested_setup.name] = nested_setup
     end
@@ -434,22 +438,37 @@ module Sunspot
 
       # Returns true when any class's setup declares a nested association.
       def nested_anywhere? #:nodoc:
-        setups.values.any? { |setup| setup.nested_setups.any? }
+        nested_declared? && setups.values.any? { |setup| ignoring_missing_constants { setup.nested_setups.any? } }
+      end
+
+      # Records that some class has declared a nested association, so the
+      # nested checks in removal can return at once in an app that never does.
+      def nested_declared! #:nodoc:
+        @nested_declared = true
+      end
+
+      def nested_declared? #:nodoc:
+        !!@nested_declared
       end
 
       # Returns true when one of the given classes, or a subclass of one,
       # declares a nested association.
       def nested_under?(classes) #:nodoc:
+        return false unless nested_declared?
         return true if classes.any? { |type| (setup = self.for(type)) && setup.nested_setups.any? }
         setups.values.any? do |setup|
-          next false if setup.nested_setups.empty?
-          clazz = begin
-            setup.clazz
-          rescue NameError
-            next false
-          end
-          classes.any? { |type| clazz <= type }
+          ignoring_missing_constants { setup.nested_setups.any? && classes.any? { |type| setup.clazz <= type } }
         end
+      end
+
+      # Yields, returning false when a setup's class, or one of its ancestors,
+      # no longer resolves to a constant, as after a test removes a stubbed
+      # class.
+      def ignoring_missing_constants #:nodoc:
+        yield
+      rescue NameError => e
+        raise if e.is_a?(NoMethodError)
+        false
       end
 
       protected

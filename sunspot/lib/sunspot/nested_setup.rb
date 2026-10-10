@@ -39,8 +39,10 @@ module Sunspot
       @path
     end
 
+    # Returns the model's children, each once, so an association that lists a
+    # record twice doesn't give two child documents the same id.
     def children_for(model)
-      Util.Array(@children_extractor.value_for(model)).compact
+      Util.Array(@children_extractor.value_for(model)).compact.uniq
     end
 
     def clazz

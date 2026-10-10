@@ -199,6 +199,16 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
     end
   end
 
+  describe 'an association read through another method' do
+    it 'indexes and finds the children :using names' do
+      plan = Plan.new(:name => 'plan', :milestones => [milestone('design', Time.utc(2026, 2, 1))])
+      Sunspot.index!(plan)
+
+      expect(Sunspot.search(Plan) { with_child(:steps) { with :name, 'design' } }.results).to eq([plan])
+      expect(solr_count('_sunspot_nested_path_s:"Plan.steps"')).to eq(1)
+    end
+  end
+
   describe 'other classes with the same association' do
     let(:t) { Time.utc(2026, 2, 1) }
 

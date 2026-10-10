@@ -146,3 +146,19 @@ Sunspot.setup(SubCrate) do
     string(:at) { 'x' }
   end
 end
+
+# Children read through a method named differently from the association
+class Plan < MockRecord
+  attr_accessor :name
+  attr_writer :milestones
+
+  def milestones
+    @milestones ||= []
+  end
+end
+
+Sunspot.setup(Plan) do
+  nested :steps, :using => :milestones do
+    string :name
+  end
+end

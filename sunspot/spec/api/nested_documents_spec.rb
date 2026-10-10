@@ -86,6 +86,11 @@ describe 'nested documents' do
       expect(indexed_project.field_by_name(:name_s).value).to eq('Bridge')
     end
 
+    it 'sends a record the association lists twice as one child' do
+      session.index(Project.new(:name => 'Twice', :milestones => [milestone, milestone]))
+      expect(children(connection.adds.last.first).length).to eq(1)
+    end
+
     it 'sends no children for an empty association' do
       session.index(Project.new(:name => 'Empty'))
       expect(children(connection.adds.last.first)).to be_empty
@@ -108,6 +113,18 @@ describe 'nested documents' do
   describe 'atomic updates' do
     it 'refuses atomic updates to a class with nested associations' do
       expect { session.atomic_update(Project, 1 => { :name => 'x' }) }.to raise_error(ArgumentError, /nested documents/)
+    end
+  end
+
+  describe 'declaring the same association twice on one class' do
+    it 'keeps the fields of both blocks' do
+      Object.const_set(:TwiceDeclared, Class.new(MockRecord))
+      Sunspot.setup(TwiceDeclared) { nested(:kids) { string :a } }
+      Sunspot.setup(TwiceDeclared) { nested(:kids) { string :b } }
+
+      expect(Sunspot::Setup.for(TwiceDeclared).nested_setup(:kids).fields.map(&:name)).to match_array([:a, :b])
+    ensure
+      Object.send(:remove_const, :TwiceDeclared)
     end
   end
 
@@ -143,6 +160,26 @@ describe 'nested documents' do
       milestone = Milestone.new(:name => 'design')
       expect { session.search(Project) { with_child(:milestones) { with(milestone) } } }.to raise_error(ArgumentError, /Instance restrictions/)
       expect { session.search(Project) { with_child(:milestones) { without(milestone) } } }.to raise_error(ArgumentError, /Instance restrictions/)
+    end
+
+    it 'works in a query facet row' do
+      session.search(Project) do
+        facet :designed do
+          row(:yes) { with_child(:milestones) { with :name, 'design' } }
+        end
+      end
+      expect(Array(connection.searches.last[:'facet.query'])).to include(a_string_starting_with('_query_:"{!parent'))
+    end
+
+    it 'can be excluded from a facet' do
+      session.search(Project) do
+        designed = with_child(:milestones) { with :name, 'design' }
+        facet :status, :exclude => designed
+      end
+      tag = last_fq.last[/\A\{!tag=([^}]+)\}/, 1]
+      expect(tag).not_to be_nil
+      expect(last_fq.last).to include('_query_:"{!parent')
+      expect(connection.searches.last[:'facet.field']).to include("{!ex=#{tag}}status_s")
     end
 
     it 'combines with parent restrictions as separate filters' do
@@ -239,6 +276,16 @@ describe 'nested documents' do
     end
 
     it 'removes a class with no nested associations anywhere beneath it by its plain query' do
+      session.remove_all(Post)
+      session.remove(Post) { with :title, 'monkeys' }
+      expect(connection.deletes_by_query).to eq(['type:Post', '(type:Post AND title_ss:monkeys)'])
+    end
+
+    it 'removes a class without nested associations when another registered class no longer resolves' do
+      Object.const_set(:GoneThing, Class.new(MockRecord))
+      Sunspot.setup(GoneThing) { string :name }
+      Object.send(:remove_const, :GoneThing)
+
       session.remove_all(Post)
       session.remove(Post) { with :title, 'monkeys' }
       expect(connection.deletes_by_query).to eq(['type:Post', '(type:Post AND title_ss:monkeys)'])

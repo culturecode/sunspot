@@ -1081,13 +1081,14 @@ The schema needs a `_root_` field with the same type as `id`. The bundled config
 <field name="_root_" type="string" indexed="true" stored="false" multiValued="false"/>
 ```
 
-On Solr 8 and above, once the schema has `_root_`, Solr replaces a document by its `_root_` value. Documents indexed before the field was added have none, so reindexing one adds a new copy beside the old one, and later reindexes replace only the new copy. The old copies stay until they're deleted, so clear and reindex every class (`rake sunspot:reindex`, which deletes each class's documents first) right after adding the field.
+Adding `_root_` to a core that already holds documents needs a full reindex of every class on Solr 8 and above; see [Adding `_root_` to an existing core](#adding-_root_-to-an-existing-core).
 
 #### Things to know
 
 * Children are indexed only as part of their parent, so reindex the parent whenever its children change.
 * Reindexing a parent replaces its whole block on Solr 8 and above. On earlier versions, including the Solr that `sunspot_solr` bundles, a parent whose children went from some to none keeps its old children, and one whose children went from none to some is indexed twice; remove it before reindexing it there.
 * Atomic updates raise `ArgumentError` for a class with nested associations. Index the whole record instead.
+* Removing a record of a nested class also sends a delete-by-query on `_root_`, because Solr before 8 leaves the children behind on a delete by id. Solr 8 and above delete them anyway, so there it's an extra, slower request per removal.
 * A nested block can't declare a boost, an id prefix, a join or a nested association of its own, and `with(record)` / `without(record)` inside `with_child` raise `ArgumentError`.
 * A subclass that declares the association again replaces its fields rather than adding to them. A search of the superclass still reaches its children, but only through fields both declare the same way.
 * A child document's id is `"<parent id>/<association>/<child id>"`, where the child id is its Sunspot index id, or its position in the association when its class has no Sunspot adapter. Children carry a `_sunspot_nested_path_s` field naming their association and no `type`, so searches for the parent class never return them.
@@ -1741,6 +1742,10 @@ solr:
 
 where the `./solr/init` directory contains a shell script that does any initial setup like downloading and unzipping your cores.
 In both cases, the solr images by default expects cores to be placed in `/opt/solr/server/solr/mycores`.
+
+### Adding `_root_` to an existing core
+
+The bundled configset and `examples/solr7_core` define a `_root_` field, which [nested documents](#nested-documents-block-joins) need. If you bring an existing core's schema up to date with them on Solr 8 or above, the change affects every class, nested or not. Once the schema has `_root_`, Solr replaces and deletes documents by their `_root_` value, and documents indexed before the field was added have none. Reindexing one of them adds a new copy beside the old one, later reindexes replace only the new copy, and removing it by id leaves the old copy in place. The old copies stay until they're deleted, so clear and reindex every class (`rake sunspot:reindex`, which deletes each class's documents first) right after adding the field.
 
 ## Development
 
