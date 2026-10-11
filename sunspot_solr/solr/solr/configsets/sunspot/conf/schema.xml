@@ -129,6 +129,9 @@
     <field name="type" stored="false" type="string" multiValued="true" indexed="true"/>
     <!-- *** This field is used by Sunspot! *** -->
     <field name="class_name" stored="false" type="string" multiValued="false" indexed="true"/>
+    <!-- *** This field is used by Sunspot's nested documents! *** -->
+    <!-- Solr fills it with the id of the top document in each block. -->
+    <field name="_root_" stored="false" type="string" multiValued="false" indexed="true"/>
     <!-- *** This field is used by Sunspot! *** -->
     <field name="text" stored="false" type="string" multiValued="true" indexed="true"/>
     <!-- *** This field is used by Sunspot! *** -->
