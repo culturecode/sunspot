@@ -56,3 +56,5 @@ jobs:
       env:
         GEM: ${{ matrix.gem }}
         UPDATE_FORMAT: ${{ matrix.update-format }}
+        # The Solr Culture Code runs in production. sunspot_solr's own specs test the Solr it bundles.
+        SOLR_IMAGE: ${{ matrix.gem != 'sunspot_solr' && 'solr:9.10.1' || '' }}

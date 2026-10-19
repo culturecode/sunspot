@@ -7,6 +7,12 @@ module IntegrationHelper
     end
   end
 
+  # Skips the example on Solr `major` and later, for behaviour that version changed
+  def skip_from_solr(major, reason)
+    version = Sunspot.session.send(:connection).get('admin/system')['lucene']['solr-spec-version']
+    skip "#{reason} (Solr #{version})" if version.to_i >= major
+  end
+
   def featured_for_posts(method, param, negated = false)
     with_method = negated ? :without : :with
     param = date_ranges[param] if param.is_a? String
