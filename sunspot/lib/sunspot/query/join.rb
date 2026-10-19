@@ -45,7 +45,7 @@ module Sunspot
 
         {
           :q     => "_query_:\"{!join from=#{@from} to=#{@to} v=$#{q_name}}\"",
-          q_name => "_query_:\"{!field f=type}#{@target.name}\"+_query_:\"{!edismax #{options}}#{keywords}\""
+          q_name => "+_query_:\"{!field f=type}#{@target.name}\"+_query_:\"{!edismax #{options}}#{keywords}\""
         }
       end
 
