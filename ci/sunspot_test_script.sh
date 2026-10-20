@@ -13,15 +13,23 @@ solr_responding() {
 # Solr that sunspot_solr bundles.
 start_solr_container() {
   /bin/echo -n "Starting $SOLR_IMAGE on port $SOLR_PORT for Sunspot specs..."
-  docker run -d --name sunspot-solr -p $SOLR_PORT:8983 $SOLR_IMAGE > /dev/null
+  docker run -d --name sunspot-solr -p $SOLR_PORT:8983 $SOLR_IMAGE > /dev/null || exit 1
+  tries=0
   until curl -s -o /dev/null "http://localhost:$SOLR_PORT/solr/admin/cores"; do
+    tries=$((tries + 1))
+    if [ $tries -gt 120 ]; then
+      /bin/echo " Solr didn't start."
+      docker logs sunspot-solr
+      exit 1
+    fi
     /bin/echo -n "."
     sleep 1
   done
-  docker exec --user root sunspot-solr mkdir -p /var/solr/data/configsets
-  docker cp "$SUNSPOT_LIB_HOME/ci/solr9" sunspot-solr:/var/solr/data/configsets/sunspot
-  docker exec --user root sunspot-solr chown -R solr:solr /var/solr/data/configsets
-  curl -s -f -X POST "http://localhost:$SOLR_PORT/solr/admin/cores?action=CREATE&name=default&configSet=sunspot" > /dev/null
+  docker exec --user root sunspot-solr mkdir -p /var/solr/data/configsets &&
+    docker cp "$SUNSPOT_LIB_HOME/ci/solr9" sunspot-solr:/var/solr/data/configsets/sunspot &&
+    docker exec --user root sunspot-solr chown -R solr:solr /var/solr/data/configsets &&
+    curl -s -S -f -X POST "http://localhost:$SOLR_PORT/solr/admin/cores?action=CREATE&name=default&configSet=sunspot" > /dev/null ||
+    { /bin/echo " Couldn't create the default core."; docker logs sunspot-solr; exit 1; }
   /bin/echo "done."
 }
 
