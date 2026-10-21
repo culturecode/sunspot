@@ -4,7 +4,7 @@ module IntegrationHelper
       Sunspot.config.solr.url = ENV['SOLR_URL'] || 'http://localhost:8983/solr/default'
       Sunspot.config.solr.update_format = ENV['UPDATE_FORMAT'].to_sym if ENV['UPDATE_FORMAT']
       Sunspot.reset!(true)
-      # Solr 7 removed index-time boosts, and Solr 9 rejects a JSON update that carries one
+      # Solr 7 removed index-time boosts, and Solr 9 rejects a JSON update that carries a field boost
       Sunspot.config.solr.index_time_boosts = IntegrationHelper.solr_version.to_i < 7
     end
   end
