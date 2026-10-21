@@ -124,6 +124,7 @@ describe 'keyword search' do
     end
 
     it 'should assign a higher score to the result matching the higher-boosted field' do
+      skip_from_solr 7, 'Solr 7 removed index-time field boosts'
       search = Sunspot.search(Post) { keywords 'rhinoceros' }
       expect(search.hits.map { |hit| hit.primary_key }).to eq(
         @posts.map { |post| post.id.to_s }
