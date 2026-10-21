@@ -53,5 +53,22 @@ describe 'indexing fulltext fields' do
       session.index(Photo.new)
       expect(connection.adds.last.first.attrs).not_to have_key(:boost)
     end
+
+    it 'sends no field boost from a batch' do
+      session.batch { session.index(post(:title => 'A Title')) }
+      expect(connection.adds.last.first.field_by_name(:title_text).attrs).not_to have_key(:boost)
+    end
+
+    it 'sends no field boost in an atomic update' do
+      session.atomic_update(Post, post.id => { :title => 'A Title' })
+      expect(connection.adds.last.first.field_by_name(:title_text).attrs).not_to have_key(:boost)
+    end
+  end
+
+  it 'sends no field boost once index_time_boosts is turned off after indexing' do
+    session.index(post(:title => 'A Title'))
+    config.solr.index_time_boosts = false
+    session.index(Post.new(:title => 'Another Title'))
+    expect(connection.adds.last.first.field_by_name(:title_text).attrs).not_to have_key(:boost)
   end
 end
