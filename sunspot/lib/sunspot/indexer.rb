@@ -9,9 +9,9 @@ module Sunspot
   #
   class Indexer #:nodoc:
 
-    def initialize(connection, index_time_boosts: true)
+    def initialize(connection, config)
       @connection = connection
-      @index_time_boosts = index_time_boosts
+      @config = config
     end
 
     # 
@@ -241,7 +241,7 @@ module Sunspot
     end
 
     def add_documents(documents)
-      documents.each { |document| remove_boosts(document) } unless @index_time_boosts
+      documents.each { |document| remove_boosts(document) } if @config.solr.index_time_boosts == false
       @connection.add(documents)
     end
 
