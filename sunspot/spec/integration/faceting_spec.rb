@@ -516,6 +516,7 @@ describe 'search faceting' do
     end
 
     it 'should return time ranges' do
+      skip_from_solr 6, 'Solr 6 removed facet.date'
       time = Time.utc(2009, 7, 8)
       search = Sunspot.search(Post) do
         facet :published_at, :time_range => time..(time + 60*60*24*2), :sort => :count

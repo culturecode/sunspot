@@ -38,6 +38,12 @@ jobs:
           - 'head'
         gem: ['sunspot', 'sunspot_rails', 'sunspot_solr']
         update-format: ['xml', 'json']
+        # The Solr that sunspot_solr bundles, and the Solr Culture Code runs in production
+        solr: ['bundled', '9.10.1']
+        exclude:
+          # sunspot_solr's own specs test the Solr it bundles
+          - gem: sunspot_solr
+            solr: '9.10.1'
     steps:
     - uses: actions/checkout@v4
     - name: Set up JDK 1.8
@@ -56,3 +62,4 @@ jobs:
       env:
         GEM: ${{ matrix.gem }}
         UPDATE_FORMAT: ${{ matrix.update-format }}
+        SOLR_IMAGE: ${{ matrix.solr != 'bundled' && format('solr:{0}', matrix.solr) || '' }}

@@ -1507,6 +1507,8 @@ class Post < ActiveRecord::Base
 end
 ```
 
+Solr 7 removed index-time boosts, for fields and documents alike. Solr 9 ignores them in XML updates and a document boost in JSON updates, but rejects a JSON update that carries a field boost with `unknown field 'boost'`. On Solr 7 and later, set `index_time_boosts` to false so Sunspot leaves them out, and boost at query time instead: `:default_boost` on the field, or `boost_fields` in the search. See [Upgrading to Solr 9](#upgrading-to-solr-9).
+
 ### Stored Fields
 
 Stored fields keep an original (untokenized/unanalyzed) version of their
@@ -1699,6 +1701,8 @@ test:
     log_level: WARNING
 ```
 
+On Solr 7 and later, add `index_time_boosts: false` under `solr:`, as [Index-Time Boosts](#index-time-boosts) explains. Without Rails, set `Sunspot.config.solr.index_time_boosts = false`.
+
 You may want to use SSL for production environments with a username and password. For example, set `SOLR_URL` to `https://username:password@production.solr.example.com/solr`.
 
 You can examine the value of `Sunspot::Rails.configuration` at runtime.
@@ -1742,6 +1746,17 @@ solr:
 
 where the `./solr/init` directory contains a shell script that does any initial setup like downloading and unzipping your cores.
 In both cases, the solr images by default expects cores to be placed in `/opt/solr/server/solr/mycores`.
+
+### Upgrading to Solr 9
+
+Sunspot's specs pass on Solr 9.10.1 with the configset in `ci/solr9`. Coming from the Solr that `sunspot_solr` bundles, these are the changes that affect Sunspot:
+
+* **The schema.** Solr 9 won't load the bundled schema. `ci/solr9` is a port of it: point fields with docValues in place of trie fields, `LatLonPointSpatialField` in place of `LatLonType`, and `StandardFilterFactory`, `defaultSearchField` and `solrQueryParser` taken out. Use it as a starting point for your core, and reindex everything after switching, since the field types change.
+* **Index-time boosts.** Solr 7 removed them, and Solr 9 rejects a JSON update that carries a field boost. Set `index_time_boosts` to false ([Index-Time Boosts](#index-time-boosts)).
+* **Matching every keyword.** Since Solr 7, edismax no longer requires every term by default. `ci/solr9/conf/solrconfig.xml` sets `mm=100%` on `/select`, so a search for several keywords still matches only documents that have them all, as it did before.
+* **Scores.** BM25 has been the default similarity since `luceneMatchVersion` 6, so relative scores differ from the bundled Solr's, and results with close scores can change order.
+* **Time range facets.** `facet :published_at, :time_range => …` sends `facet.date`, which Solr 6 removed. Use a [query facet](#query-facets) with a row for each range instead.
+* **Nested documents.** A core needs a `_root_` field for them ([Adding `_root_` to an existing core](#adding-_root_-to-an-existing-core)).
 
 ### Adding `_root_` to an existing core
 

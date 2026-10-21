@@ -124,6 +124,7 @@ describe 'keyword search' do
     end
 
     it 'should assign a higher score to the result matching the higher-boosted field' do
+      skip_from_solr 7, 'Solr 7 removed index-time field boosts'
       search = Sunspot.search(Post) { keywords 'rhinoceros' }
       expect(search.hits.map { |hit| hit.primary_key }).to eq(
         @posts.map { |post| post.id.to_s }
@@ -142,6 +143,7 @@ describe 'keyword search' do
     end
 
     it 'should assign a higher score to the higher-boosted document' do
+      skip_from_solr 7, 'Solr 7 removed index-time document boosts'
       search = Sunspot.search(Post) { keywords 'test' }
       expect(search.hits.map { |hit| hit.primary_key }).to eq(
         @posts.map { |post| post.id.to_s }
@@ -217,6 +219,7 @@ describe 'keyword search' do
     end
 
     it 'should assign scores in order of multiple boost query match' do
+      skip_from_solr 7, 'BM25, the default similarity from luceneMatchVersion 6, scores the featured term below the rating range'
       search = Sunspot.search(Post) do
         keywords 'rhino' do
           boost(2.0) { with(:featured, true) }

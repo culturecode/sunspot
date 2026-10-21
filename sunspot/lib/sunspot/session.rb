@@ -264,7 +264,7 @@ module Sunspot
     end
 
     def indexer
-      @indexer ||= Indexer.new(connection)
+      @indexer ||= Indexer.new(connection, config)
     end
 
     def setup_for_types(types)
