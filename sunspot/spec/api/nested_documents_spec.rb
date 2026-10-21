@@ -96,6 +96,12 @@ describe 'nested documents' do
       expect(children(connection.adds.last.first)).to be_empty
     end
 
+    it 'sends no child field boost with index_time_boosts off' do
+      session.config.solr.index_time_boosts = false
+      session.index(Gadget.new(:milestones => [milestone]))
+      expect(children(connection.adds.last.first).first.field_by_name(:notes_text).attrs).not_to have_key(:boost)
+    end
+
   end
 
   describe 'indexing with an RSolr that has no child documents', :unless => child_documents do

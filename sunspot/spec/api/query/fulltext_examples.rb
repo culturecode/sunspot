@@ -420,7 +420,7 @@ shared_examples_for 'fulltext query' do
       q_name = "qPhoto#{obj_id}"
 
       expect(connection.searches.last[:q]).to eq "(_query_:\"{!join from=photo_container_id_i to=id_i v=$#{q_name}}\" OR _query_:\"{!edismax qf='description_text^1.2'}keyword2\")"
-      expect(connection.searches.last[q_name]).to eq "_query_:\"{!field f=type}Photo\"+_query_:\"{!edismax qf='caption_text'}keyword1\""
+      expect(connection.searches.last[q_name]).to eq "+_query_:\"{!field f=type}Photo\"+_query_:\"{!edismax qf='caption_text'}keyword1\""
     end
 
     it "should be able to resolve name conflicts with the :prefix option" do
@@ -435,7 +435,7 @@ shared_examples_for 'fulltext query' do
       q_name = "qPhoto#{obj_id}"
 
       expect(connection.searches.last[:q]).to eq "(_query_:\"{!edismax qf='description_text^1.2'}keyword1\" OR _query_:\"{!join from=photo_container_id_i to=id_i v=$#{q_name}}\")"
-      expect(connection.searches.last[q_name]).to eq "_query_:\"{!field f=type}Photo\"+_query_:\"{!edismax qf='description_text'}keyword2\""
+      expect(connection.searches.last[q_name]).to eq "+_query_:\"{!field f=type}Photo\"+_query_:\"{!edismax qf='description_text'}keyword2\""
     end
 
     it "should recognize fields when adding from DSL, e.g. when calling boost_fields" do
@@ -451,7 +451,7 @@ shared_examples_for 'fulltext query' do
       q_name = "qPhoto#{obj_id}"
 
       expect(connection.searches.last[:q]).to eq "(_query_:\"{!edismax qf='description_text^1.5'}keyword1\" OR _query_:\"{!join from=photo_container_id_i to=id_i v=$#{q_name}}\")"
-      expect(connection.searches.last[q_name]).to eq "_query_:\"{!field f=type}Photo\"+_query_:\"{!edismax qf='description_text^1.3'}keyword1\""
+      expect(connection.searches.last[q_name]).to eq "+_query_:\"{!field f=type}Photo\"+_query_:\"{!edismax qf='description_text^1.3'}keyword1\""
     end
 
     private

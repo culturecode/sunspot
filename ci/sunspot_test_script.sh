@@ -9,7 +9,36 @@ solr_responding() {
   curl -o /dev/null "http://localhost:$SOLR_PORT/solr/admin/ping" > /dev/null 2>&1
 }
 
+# With SOLR_IMAGE set, runs that Docker image of Solr with the configset in ci/solr9, in place of the
+# Solr that sunspot_solr bundles.
+start_solr_container() {
+  /bin/echo -n "Starting $SOLR_IMAGE on port $SOLR_PORT for Sunspot specs..."
+  docker run -d --name sunspot-solr -p $SOLR_PORT:8983 $SOLR_IMAGE > /dev/null || exit 1
+  tries=0
+  until curl -s -o /dev/null "http://localhost:$SOLR_PORT/solr/admin/cores"; do
+    tries=$((tries + 1))
+    if [ $tries -gt 120 ]; then
+      /bin/echo " Solr didn't start."
+      docker logs sunspot-solr
+      exit 1
+    fi
+    /bin/echo -n "."
+    sleep 1
+  done
+  docker exec --user root sunspot-solr mkdir -p /var/solr/data/configsets &&
+    docker cp "$SUNSPOT_LIB_HOME/ci/solr9" sunspot-solr:/var/solr/data/configsets/sunspot &&
+    docker exec --user root sunspot-solr chown -R solr:solr /var/solr/data/configsets &&
+    curl -s -S -f -X POST "http://localhost:$SOLR_PORT/solr/admin/cores?action=CREATE&name=default&configSet=sunspot" > /dev/null ||
+    { /bin/echo " Couldn't create the default core."; docker logs sunspot-solr; exit 1; }
+  /bin/echo "done."
+}
+
 start_solr_server() {
+  if [ -n "$SOLR_IMAGE" ]; then
+    start_solr_container
+    return
+  fi
+
   # go to sunspot_solr folder and install dependencies
   current_path=`pwd`
   cd ../sunspot_solr
@@ -34,6 +63,11 @@ start_solr_server() {
 }
 
 stop_solr_server() {
+  if [ -n "$SOLR_IMAGE" ]; then
+    docker rm -f sunspot-solr > /dev/null
+    return
+  fi
+
   cd ../sunspot_solr
   /bin/echo -n "Stopping Solr... "
   bundle exec sunspot-solr stop -p $SOLR_PORT
