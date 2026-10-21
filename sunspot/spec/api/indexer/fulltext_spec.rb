@@ -40,4 +40,18 @@ describe 'indexing fulltext fields' do
     session.index(Photo.new)
     expect(connection.adds.last.first.attrs[:boost]).to eq(0.75)
   end
+
+  describe 'with index_time_boosts off' do
+    before { config.solr.index_time_boosts = false }
+
+    it 'sends no field boost' do
+      session.index(post(:title => 'A Title'))
+      expect(connection.adds.last.first.field_by_name(:title_text).attrs).not_to have_key(:boost)
+    end
+
+    it 'sends no document boost' do
+      session.index(Photo.new)
+      expect(connection.adds.last.first.attrs).not_to have_key(:boost)
+    end
+  end
 end

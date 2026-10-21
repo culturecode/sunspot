@@ -9,8 +9,9 @@ module Sunspot
   #
   class Indexer #:nodoc:
 
-    def initialize(connection)
+    def initialize(connection, index_time_boosts: true)
       @connection = connection
+      @index_time_boosts = index_time_boosts
     end
 
     # 
@@ -240,7 +241,17 @@ module Sunspot
     end
 
     def add_documents(documents)
+      documents.each { |document| remove_boosts(document) } unless @index_time_boosts
       @connection.add(documents)
+    end
+
+    # Removes the boosts from +document+, its fields and its child documents
+    def remove_boosts(document)
+      document.attrs.delete(:boost)
+      document.fields.each do |field|
+        field.attrs.delete(:boost)
+        remove_boosts(field.value) if field.value.respond_to?(:fields)
+      end
     end
 
     def add_batch_documents(documents)

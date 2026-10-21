@@ -264,7 +264,7 @@ module Sunspot
     end
 
     def indexer
-      @indexer ||= Indexer.new(connection)
+      @indexer ||= Indexer.new(connection, index_time_boosts: config.solr.index_time_boosts != false)
     end
 
     def setup_for_types(types)
