@@ -54,6 +54,7 @@ module Sunspot #:nodoc:
         config.solr.open_timeout = sunspot_rails_configuration.open_timeout
         config.solr.proxy = sunspot_rails_configuration.proxy
         config.solr.update_format = sunspot_rails_configuration.update_format
+        config.solr.index_time_boosts = sunspot_rails_configuration.index_time_boosts
         config
       end
 
@@ -70,6 +71,7 @@ module Sunspot #:nodoc:
         config.solr.open_timeout = sunspot_rails_configuration.open_timeout
         config.solr.proxy = sunspot_rails_configuration.proxy
         config.solr.update_format = sunspot_rails_configuration.update_format
+        config.solr.index_time_boosts = sunspot_rails_configuration.index_time_boosts
         config
       end
     end

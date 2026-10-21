@@ -305,6 +305,14 @@ module Sunspot #:nodoc:
         @update_format ||= user_configuration_from_key('solr', 'update_format')
       end
 
+      #
+      # Whether to send index-time field and document boosts. Defaults to true.
+      # Set it to false on Solr 7 and later, which removed them.
+      #
+      def index_time_boosts
+        @index_time_boosts ||= user_configuration_from_key('solr', 'index_time_boosts') != false
+      end
+
       def proxy
         @proxy ||= user_configuration_from_key('solr', 'proxy')
       end

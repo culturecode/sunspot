@@ -61,6 +61,10 @@ describe Sunspot::Rails::Configuration, "default values without a sunspot.yml" d
     expect(@config.update_format).to be_nil
   end
 
+  it "should send index-time boosts when 'index_time_boosts' is not set" do
+    expect(@config.index_time_boosts).to eq(true)
+  end
+
   it "should set 'log_level' property using Rails log level when not set" do
     allow(::Rails.logger).to receive(:level){ 3 }
     expect(@config.log_level).to eq('SEVERE')
@@ -169,6 +173,10 @@ describe Sunspot::Rails::Configuration, "user provided sunspot.yml" do
 
   it "should handle the 'update_format' property when set" do
     expect(@config.update_format).to eq('json')
+  end
+
+  it "should handle the 'index_time_boosts' property when set" do
+    expect(@config.index_time_boosts).to eq(false)
   end
 
   it "should handle the 'proxy' property when set" do

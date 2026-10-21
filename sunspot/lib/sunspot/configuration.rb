@@ -5,6 +5,11 @@ module Sunspot
   # Sunspot.config.solr.url::
   #   The URL at which to connect to Solr
   #   (default: 'http://localhost:8983/solr')
+  # Sunspot.config.solr.index_time_boosts::
+  #   Whether to send the field and document boosts declared with +:boost+
+  #   and +boost+ (default: true). Solr 7 removed index-time boosts, and
+  #   Solr 9 rejects a JSON update that carries one, so set it to false on
+  #   Solr 7 and later.
   # Sunspot.config.pagination.default_per_page::
   #   Solr always paginates its results. This sets Sunspot's default result
   #   count per page if it is not explicitly specified in the query.
@@ -27,6 +32,7 @@ module Sunspot
             open_timeout nil
             proxy nil
             update_format :xml
+            index_time_boosts true
           end
           master_solr do
             url nil

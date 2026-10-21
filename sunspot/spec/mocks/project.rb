@@ -113,7 +113,7 @@ Sunspot.setup(Gadget) do
   nested :milestones do
     string(:only_here) { 'yes' }
     integer(:started_at) { 1 }
-    text(:notes) { 'gadget notes' }
+    text(:notes, :boost => 2) { 'gadget notes' }
   end
 end
 
