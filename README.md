@@ -1073,6 +1073,23 @@ The block inside `with_child` / `without_child` takes the same restrictions as a
 
 Searching several classes covers each class that declares the association, and a child field resolves as parent fields do: when every class declaring it agrees on its type.
 
+#### Sorting by a child field
+
+**Solr 8 and above.** Solr 6 and earlier, including the Solr that `sunspot_solr` bundles, reject the sort, and Solr 7 orders some parents differently.
+
+`order_by_child` sorts parents by a single-value numeric or time field of their children, among the children meeting the block's restrictions. A parent with no such child, or whose such children have no value for the field, comes last in either direction.
+
+```ruby
+# Projects by when their design milestone started, latest first
+Project.search do
+  order_by_child :milestones, :started_at, :desc do
+    with :name, 'design'
+  end
+end
+```
+
+A parent with several such children sorts by the smallest value ascending and the largest descending. `:score => :min`, `:max`, `:avg` or `:total` combines them another way. Solr compares the values as floats, so times less than about two minutes apart, and integers above 2**24, can tie. Solr also reads a negative value as zero, so times before 1970 all sort as 1970, and negative numbers as zero. A later `order_by` breaks the tie.
+
 #### Schema
 
 The schema needs a `_root_` field with the same type as `id`. The bundled configset has one.
