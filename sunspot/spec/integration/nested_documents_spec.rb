@@ -17,12 +17,6 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
 
   let(:q1) { Time.utc(2026, 1, 1)...Time.utc(2026, 4, 1) }
 
-  # Solr before 8 replaces a document with children by _root_ and one without by id
-  def skip_before_solr_8
-    version = Sunspot.session.send(:connection).get('admin/system')['lucene']['solr-spec-version']
-    skip "Solr #{version} doesn't replace a block whose children went from some to none or none to some" if version.to_i < 8
-  end
-
   before :each do
     Sunspot.remove_all!
 
@@ -205,8 +199,9 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
       expect(search { with_child(:milestones) { with :owner_names, 'ben' } }).to eq([])
     end
 
+    # Solr before 8 replaces a document with children by _root_ and one without by id
     it 'removes every child when a parent is reindexed with none' do
-      skip_before_solr_8
+      skip_before_solr 8, "doesn't replace a block whose children went from some to none or none to some"
       @designed_earlier.milestones = []
       Sunspot.index!(@designed_earlier)
 
@@ -215,7 +210,7 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
     end
 
     it 'replaces a parent that had no children when it is reindexed with some' do
-      skip_before_solr_8
+      skip_before_solr 8, "doesn't replace a block whose children went from some to none or none to some"
       @without_milestones.milestones = [milestone('launch', Time.utc(2026, 3, 1))]
       Sunspot.index!(@without_milestones)
 
