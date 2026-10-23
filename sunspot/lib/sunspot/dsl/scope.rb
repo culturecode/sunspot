@@ -242,11 +242,17 @@ module Sunspot
       private
 
       def add_block_join(negated, name, &block)
+        @scope.add_component(build_block_join(negated, name, &block).first)
+      end
+
+      # Returns a block join on the association, restricted by the block, and
+      # the setup that resolves the association's fields.
+      def build_block_join(negated, name, &block)
         nested_setups = @setup.nested_setups_named(name)
         child_setup = nested_setups.one? ? nested_setups.first : CompositeNestedSetup.new(nested_setups)
         block_join = Sunspot::Query::BlockJoin.new(nested_setups.first, negated, nil, nested_setups.map(&:path).uniq)
         Util.instance_eval_or_call(Scope.new(block_join.scope, child_setup), &block) if block
-        @scope.add_component(block_join)
+        [block_join, child_setup]
       end
 
       def add_restriction(negated, *args)

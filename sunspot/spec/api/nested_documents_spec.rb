@@ -258,6 +258,82 @@ describe 'nested documents' do
     end
   end
 
+  describe 'ordering by a child field' do
+    def last_search
+      connection.searches.last
+    end
+
+    it 'sorts by a block join over the matching children, with parents that have none last' do
+      session.search(Project) { order_by_child(:milestones, :started_at) { with :name, 'design' } }
+      expect(last_search[:sort]).to eq('exists(query($child_sort_0)) desc, query($child_sort_0) asc')
+      expect(last_search[:child_sort_0]).to eq(%q({!parent which="*:* -_sunspot_nested_path_s:[* TO *]" score=min v=$child_sort_0_child}))
+      expect(last_search[:child_sort_0_child]).to eq('{!bool filter=$child_sort_0_filter filter=$child_sort_0_present must=$child_sort_0_value}')
+      expect(last_search[:child_sort_0_filter]).to eq('(_sunspot_nested_path_s:"Project.milestones" AND name_s:design)')
+      expect(last_search[:child_sort_0_present]).to eq('started_at_d:[* TO *]')
+      expect(last_search[:child_sort_0_value]).to eq('{!func}ms(started_at_d)')
+    end
+
+    it 'leaves the filter queries alone' do
+      session.search(Project) { order_by_child(:milestones, :started_at) { with :name, 'design' } }
+      expect(last_search[:fq]).to eq(['type:Project'])
+    end
+
+    it 'takes the earliest child ascending and the latest descending' do
+      session.search(Project) { order_by_child(:milestones, :started_at, :desc) }
+      expect(last_search[:sort]).to eq('exists(query($child_sort_0)) desc, query($child_sort_0) desc')
+      expect(last_search[:child_sort_0]).to include('score=max')
+    end
+
+    it 'combines the children by the given score' do
+      session.search(Project) { order_by_child(:milestones, :started_at, :asc, :score => :max) }
+      expect(last_search[:child_sort_0]).to include('score=max')
+    end
+
+    it 'raises for a score Solr has no name for' do
+      expect { session.search(Project) { order_by_child(:milestones, :started_at, :asc, :score => :median) } }.to raise_error(ArgumentError)
+    end
+
+    it 'sorts by the field itself for a number' do
+      session.search(Project) { order_by_child(:milestones, :days_late) }
+      expect(last_search[:child_sort_0_value]).to eq('{!func}field(days_late_i)')
+    end
+
+    it 'scopes a sort with no block to the association alone' do
+      session.search(Project) { order_by_child(:milestones, :started_at) }
+      expect(last_search[:child_sort_0_filter]).to eq('_sunspot_nested_path_s:"Project.milestones"')
+    end
+
+    it 'names each sort by its position among the others' do
+      session.search(Project) do
+        order_by :name
+        order_by_child(:milestones, :started_at) { with :name, 'design' }
+        order_by_child(:milestones, :finished_at) { with :name, 'build' }
+      end
+      expect(last_search[:sort]).to eq('name_s asc, exists(query($child_sort_1)) desc, query($child_sort_1) asc, exists(query($child_sort_2)) desc, query($child_sort_2) asc')
+      expect(last_search[:child_sort_1_value]).to eq('{!func}ms(started_at_d)')
+      expect(last_search[:child_sort_2_value]).to eq('{!func}ms(finished_at_d)')
+    end
+
+    it 'raises for a text, string, date range or multiple-value field' do
+      expect { session.search(Project) { order_by_child(:milestones, :name) } }.to raise_error(ArgumentError)
+      expect { session.search(Project) { order_by_child(:milestones, :active) } }.to raise_error(ArgumentError)
+      expect { session.search(Project) { order_by_child(:milestones, :owner_names) } }.to raise_error(ArgumentError)
+    end
+
+    it 'raises for a field the association does not declare' do
+      expect { session.search(Project) { order_by_child(:milestones, :verdict) } }.to raise_error(Sunspot::UnrecognizedFieldError)
+    end
+
+    it 'raises for an association that was never declared' do
+      expect { session.search(Project) { order_by_child(:tasks, :started_at) } }.to raise_error(Sunspot::UnrecognizedFieldError)
+    end
+
+    it 'resolves the association across a multi-class search' do
+      session.search(Project, Program) { order_by_child(:milestones, :started_at) }
+      expect(last_search[:child_sort_0_filter]).to include('Project.milestones')
+    end
+  end
+
   describe 'removal' do
     it 'removes the whole block when removing a parent' do
       project = Project.new

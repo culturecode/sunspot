@@ -53,6 +53,50 @@ module Sunspot
       end
 
       #
+      # Specify that the results should be ordered by a field of their children
+      # in a nested association, among the children that satisfy every
+      # restriction in the block. The block takes the same restrictions as
+      # DSL::Scope#with_child. Results with no such child, or whose such
+      # children have no value for the field, come last, whatever the
+      # direction. Requires Solr 8 or later.
+      #
+      # A result with several such children sorts by the earliest or smallest
+      # value ascending and by the latest or largest descending, unless
+      # +:score+ chooses how Solr combines them. Solr reads a negative value
+      # as zero, so times before 1970 tie with each other, and negative
+      # numbers with zero.
+      #
+      # ==== Parameters
+      #
+      # name<Symbol>::
+      #   the association, declared with DSL::Fields#nested
+      # field_name<Symbol>::
+      #   a single-value numeric or time field of the child
+      # direction<Symbol>::
+      #   :asc or :desc (default :asc)
+      #
+      # ==== Options
+      #
+      # :score::
+      #   :min, :max, :avg or :total, Solr's names for combining the values of
+      #   several children
+      #
+      # ==== Example
+      #
+      #   Sunspot.search(Project) do
+      #     order_by_child :milestones, :started_at, :desc do
+      #       with :name, 'design'
+      #     end
+      #   end
+      #
+      def order_by_child(name, field_name, direction = nil, options = {}, &block)
+        block_join, child_setup = build_block_join(false, name, &block)
+        @query.add_sort(
+          Sunspot::Query::Sort::ChildSort.new(block_join, child_setup.field(field_name), direction, options)
+        )
+      end
+
+      #
       # DEPRECATED Use <code>order_by(:random)</code>
       #
       def order_by_random

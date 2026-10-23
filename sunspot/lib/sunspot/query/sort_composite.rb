@@ -25,13 +25,25 @@ module Sunspot
         @sorts.any? { |s| s.to_param.include?(sort) }
       end
 
-      # 
-      # Combine the sorts into a single param by joining them
+      #
+      # Combine the sorts into a single param by joining them. A sort with
+      # parameters of its own, such as a Sort::ChildSort, has them named by
+      # its position, so two of them can't collide.
       #
       def to_params(prefix = "")
         unless @sorts.empty?
           key = "#{prefix}sort".to_sym
-          { key => @sorts.map { |sort| sort.to_param } * ', ' }
+          params = {}
+          clauses = @sorts.each_with_index.map do |sort, index|
+            if sort.respond_to?(:params)
+              name = "child_sort_#{index}"
+              params.merge!(sort.params(name))
+              sort.to_param(name)
+            else
+              sort.to_param
+            end
+          end
+          params.merge(key => clauses * ', ')
         else
           {}
         end

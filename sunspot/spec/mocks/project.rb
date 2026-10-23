@@ -27,6 +27,7 @@ Sunspot.setup(Project) do
     time :due_at
     string :owner_names, :multiple => true
     integer(:days_late) { finished_at && due_at && finished_at > due_at ? ((finished_at - due_at) / 86_400).to_i : 0 }
+    date_range(:active) { started_at && finished_at && (started_at..finished_at) }
   end
 
   nested :reviews do

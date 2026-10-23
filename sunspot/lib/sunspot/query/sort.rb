@@ -115,6 +115,63 @@ module Sunspot
         end
       end
 
+      #
+      # A ChildSort sorts parents by a field of their children in a nested
+      # association, among the children matching its block join's scope that
+      # have a value for the field. The sort is by a block join query whose
+      # score is those children's field values, combined by +:score+. A parent
+      # with no such child doesn't match that query, and sorts after those that
+      # do.
+      #
+      # The query takes its parts from parameters of its own, named by
+      # SortComposite, which keeps each part's escaping to one level. Solr
+      # compares scores as floats, so two times less than about two minutes
+      # apart, or integers above 2**24, may tie.
+      #
+      class ChildSort < Abstract
+        SCORES = [:min, :max, :avg, :total]
+
+        def initialize(block_join, field, direction = nil, options = {})
+          super(direction)
+          if field.multiple?
+            raise(ArgumentError, "#{field.name} cannot be used for ordering because it is a multiple-value field")
+          end
+          if field.type.is_a?(Type::DateRangeType) || !(field.type.is_a?(Type::TimeType) || field.type.is_a?(Type::IntegerType) || field.type.is_a?(Type::FloatType))
+            raise(ArgumentError, "#{field.name} cannot be used for ordering children because it is not a numeric or time field")
+          end
+          @block_join, @field = block_join, field
+          @score = (options[:score] || (direction_for_solr == 'asc' ? :min : :max)).to_sym
+          unless SCORES.include?(@score)
+            raise(ArgumentError, "Unknown score #{@score.inspect}. Acceptable input is: #{SCORES.map(&:inspect) * ', '}")
+          end
+        end
+
+        def to_param(name = 'child_sort')
+          "exists(query($#{name})) desc, query($#{name}) #{direction_for_solr}"
+        end
+
+        # The parameters #to_param refers to, by the same +name+
+        def params(name)
+          {
+            :"#{name}" => %Q({!parent which="#{BlockJoin.escape(BlockJoin::ROOTS)}" score=#{@score} v=$#{name}_child}),
+            :"#{name}_child" => "{!bool filter=$#{name}_filter filter=$#{name}_present must=$#{name}_value}",
+            :"#{name}_filter" => @block_join.scope.to_boolean_phrase,
+            :"#{name}_present" => "#{@field.indexed_name}:[* TO *]",
+            :"#{name}_value" => "{!func}#{value_function}"
+          }
+        end
+
+        private
+
+        def value_function
+          if @field.type.is_a?(Type::TimeType)
+            "ms(#{@field.indexed_name})"
+          else
+            "field(#{@field.indexed_name})"
+          end
+        end
+      end
+
       class SolrIdSort < Abstract
         def to_param
           "id #{direction_for_solr}"
