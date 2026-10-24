@@ -111,6 +111,80 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
     end
   end
 
+  describe 'order_by_child' do
+    before { skip_before_solr 8, 'Solr 6 and earlier reject the sort, and Solr 7 orders some parents differently' }
+
+    it 'sorts by the matching child, with parents that have none last' do
+      expect(search { order_by_child(:milestones, :started_at) { with :name, 'design' } }).to eq([@designed_earlier, @designed_in_q1, @without_milestones])
+    end
+
+    it 'keeps parents that have no matching child last when descending' do
+      expect(search { order_by_child(:milestones, :started_at, :desc) { with :name, 'design' } }).to eq([@designed_in_q1, @designed_earlier, @without_milestones])
+    end
+
+    it 'sorts by the earliest of several children ascending' do
+      expect(search { order_by_child(:milestones, :started_at) }.first).to eq(@designed_earlier)
+    end
+
+    it 'combines several children by the given score' do
+      @designed_earlier.milestones << milestone('launch', Time.utc(2026, 3, 1))
+      Sunspot.index!(@designed_earlier)
+      expect(search { order_by_child(:milestones, :started_at, :desc) }.first).to eq(@designed_earlier)
+      expect(search { order_by_child(:milestones, :started_at, :desc, :score => :min) }.first).to eq(@designed_in_q1)
+    end
+
+    it 'sorts a child whose value is zero before parents with no child' do
+      expect(search { order_by_child(:milestones, :days_late) }).to eq([@designed_earlier, @designed_in_q1, @without_milestones])
+      expect(search { order_by_child(:milestones, :days_late, :desc) }).to eq([@designed_in_q1, @designed_earlier, @without_milestones])
+    end
+
+    it 'sorts a parent whose matching children lack the field with the parents that have none' do
+      undated = Project.new(:name => 'undated', :milestones => [milestone('design', nil)])
+      Sunspot.index!(undated)
+      expect(search { order_by_child(:milestones, :started_at) { with :name, 'design' } }.first(2)).to eq([@designed_earlier, @designed_in_q1])
+      expect(search { order_by_child(:milestones, :started_at, :desc) { with :name, 'design' } }.first(2)).to eq([@designed_in_q1, @designed_earlier])
+    end
+
+    it 'sorts times before 1970 as 1970, so they tie with each other' do
+      historic = Project.new(:name => 'historic', :milestones => [milestone('design', Time.utc(1960, 1, 1))])
+      older = Project.new(:name => 'older', :milestones => [milestone('design', Time.utc(1950, 1, 1))])
+      Sunspot.index!(historic, older)
+      by_name = lambda do |direction|
+        search do
+          order_by_child(:milestones, :started_at) { with :name, 'design' }
+          order_by(:name, direction)
+        end
+      end
+      # Their names order them, in either direction, though 1950 is before 1960
+      expect(by_name.call(:asc)).to eq([historic, older, @designed_earlier, @designed_in_q1, @without_milestones])
+      expect(by_name.call(:desc)).to eq([older, historic, @designed_earlier, @designed_in_q1, @without_milestones])
+      descending = search { order_by_child(:milestones, :started_at, :desc) { with :name, 'design' } }
+      expect(descending.first(2)).to eq([@designed_in_q1, @designed_earlier])
+      expect(descending[2, 2]).to contain_exactly(historic, older)
+    end
+
+    it 'sorts the matching parents alongside a filter on another child' do
+      results = search do
+        with_child(:milestones) { with :name, 'build' }
+        order_by_child(:milestones, :started_at) { with :name, 'design' }
+      end
+      expect(results).to eq([@designed_earlier])
+    end
+
+    it 'breaks ties with the next sort' do
+      results = search do
+        order_by_child(:milestones, :started_at) { with :name, 'build' }
+        order_by :name, :desc
+      end
+      expect(results).to eq([@designed_earlier, @without_milestones, @designed_in_q1])
+    end
+
+    it 'sorts across pages' do
+      pages = (1..3).map { |page| search { order_by_child(:milestones, :started_at) { with :name, 'design' }; paginate :page => page, :per_page => 1 } }
+      expect(pages.flatten).to eq([@designed_earlier, @designed_in_q1, @without_milestones])
+    end
+  end
+
   describe 'searching the parents alone' do
     it 'returns parents, never children' do
       expect(search {}).to match_array([@designed_in_q1, @designed_earlier, @without_milestones])
