@@ -19,6 +19,12 @@ module IntegrationHelper
     skip "#{reason} (Solr #{version})" if version.to_i >= major
   end
 
+  # Skips the example before Solr `major`, for behaviour that only that version and later have
+  def skip_before_solr(major, reason)
+    version = IntegrationHelper.solr_version
+    skip "#{reason} (Solr #{version})" if version.to_i < major
+  end
+
   def featured_for_posts(method, param, negated = false)
     with_method = negated ? :without : :with
     param = date_ranges[param] if param.is_a? String
