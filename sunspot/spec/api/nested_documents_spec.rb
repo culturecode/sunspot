@@ -348,6 +348,13 @@ describe 'nested documents' do
       })
     end
 
+    it "serializes its params with JSON.generate, not Hash#to_json, which ActiveSupport 6.1 breaks under json 3" do
+      allow_any_instance_of(Hash).to receive(:to_json).and_raise(ArgumentError, 'unknown keyword: quirks_mode')
+
+      session.search(Project) { child_facet(:milestones, :name) }
+      expect(json_facet.keys).to eq(['name'])
+    end
+
     it 'is keyed by its :name' do
       session.search(Project) { child_facet(:milestones, :name, :name => :milestone_name) }
       expect(json_facet.keys).to eq(['milestone_name'])

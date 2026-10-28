@@ -1,4 +1,4 @@
-require 'json' # to_params serializes the facet with to_json
+require 'json'
 
 module Sunspot
   module Query
@@ -49,7 +49,7 @@ module Sunspot
       end
 
       def to_params
-        { 'json.facet' => self.get_params.to_json }
+        { 'json.facet' => JSON.generate(get_params) }
       end
 
       private
