@@ -17,7 +17,7 @@ module Sunspot
       def to_params
         params = {}
         if !@json_facet.nil?
-          params['json.facet'] = recursive_add_stats(@json_facet.get_params).to_json
+          params['json.facet'] = JSON.generate(recursive_add_stats(@json_facet.get_params))
         else
           params.merge!(:stats => true, :"stats.field" => [@field.indexed_name])
           params[facet_key] = @facets.map(&:indexed_name) unless @facets.empty?
