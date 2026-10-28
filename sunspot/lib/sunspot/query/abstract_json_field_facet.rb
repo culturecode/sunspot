@@ -1,3 +1,5 @@
+require 'json' # to_params serializes the facet with to_json
+
 module Sunspot
   module Query
     class AbstractJsonFieldFacet
