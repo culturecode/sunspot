@@ -105,6 +105,36 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
     end
   end
 
+  describe 'child_facet' do
+    before { skip_before_solr 8, 'The parent count needs uniqueBlock, which Solr 7 and earlier lack' }
+
+    def facet_rows(&block)
+      Sunspot.search(Project, &block).facet(:name).rows.map { |row| [row.value, row.count] }
+    end
+
+    it 'counts the parents with a child of each value, not the children' do
+      Sunspot.index!(Project.new(:name => 'built twice', :status => 'active', :milestones => [milestone('build', Time.utc(2026, 3, 1)), milestone('build', Time.utc(2026, 5, 1))]))
+
+      expect(facet_rows { child_facet(:milestones, :name) }).to match_array([['design', 2], ['build', 2]])
+    end
+
+    it 'counts only the children meeting every condition in the block' do
+      expect(facet_rows { child_facet(:milestones, :name) { with :owner_names, 'ana' } }).to match_array([['design', 1], ['build', 1]])
+    end
+
+    it 'counts only the children of parents matching the search' do
+      expect(facet_rows { with :name, 'designed earlier'; child_facet(:milestones, :name) }).to match_array([['design', 1], ['build', 1]])
+    end
+
+    it 'counts only the children whose value matches the regular expression' do
+      expect(facet_rows { child_facet(:milestones, :name, :matches => 'des.*') }).to eq([['design', 2]])
+    end
+
+    it 'counts a regular expression containing a slash' do
+      expect(facet_rows { child_facet(:milestones, :name, :matches => 'a/b|design') }).to eq([['design', 2]])
+    end
+  end
+
   describe 'order_by_child' do
     before { skip_before_solr 8, 'Solr 6 and earlier reject the sort, and Solr 7 orders some parents differently' }
 

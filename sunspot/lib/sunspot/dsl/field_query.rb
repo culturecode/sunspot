@@ -388,6 +388,34 @@ module Sunspot
         end
       end
 
+      #
+      # Facet on a field of the children in a nested association, counting the
+      # documents that have each value rather than the children. Only the
+      # children of documents matching the search are counted, and only those
+      # that satisfy every restriction in the block, which takes the same
+      # restrictions as DSL::Scope#with_child. The facet is read as
+      # <tt>search.facet(field_name)</tt>, or by its +:name+.
+      #
+      # Takes the options of #json_facet, plus +:matches+: a Lucene regular
+      # expression the child's value of the field must match as a whole.
+      #
+      # ==== Example
+      #
+      #   search = Sunspot.search(Project) do
+      #     with :status, 'active'
+      #     child_facet :milestones, :name, :matches => 'des.*' do
+      #       with :owner_names, 'ana'
+      #     end
+      #   end
+      #   search.facet(:name).rows # each row's count is a number of projects
+      #
+      def child_facet(name, field_name, options = {}, &block)
+        block_join, child_setup = build_block_join(false, name, &block)
+        field = child_setup.field(field_name.to_sym)
+        @search.add_json_facet(field, options)
+        @query.add_query_facet(Sunspot::Query::ChildFieldJsonFacet.new(field, options, child_setup, block_join))
+      end
+
       def stats(*field_names, &block)
         options = Sunspot::Util.extract_options_from(field_names)
 

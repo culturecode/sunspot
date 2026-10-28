@@ -43,11 +43,13 @@ module Sunspot
         self.class.new(@nested_setup, !negated?, @scope, @paths)
       end
 
-      private
-
+      # The query matching the children this block join is about: those in
+      # its association that satisfy every restriction in #scope.
       def child_query
         @scope.to_boolean_phrase
       end
+
+      private
 
       def escape(value)
         self.class.escape(value)

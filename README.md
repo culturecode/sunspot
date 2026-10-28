@@ -1090,6 +1090,19 @@ end
 
 A parent with several such children sorts by the smallest value ascending and the largest descending. `:score => :min`, `:max`, `:avg` or `:total` combines them another way. Solr compares the values as floats, so times less than about two minutes apart, and integers above 2**24, can tie. Solr also reads a negative value as zero, so times before 1970 all sort as 1970, and negative numbers as zero. A later `order_by` breaks the tie.
 
+`child_facet` facets on a field of the children, counting the parents that have each value rather than the children. It counts only the children of parents matching the search, and only those meeting the block's restrictions. `:matches` keeps only the children whose value matches a Lucene regular expression, as a whole. It takes the other options of `json_facet`, and is read with `facet`, by the field's name or by `:name`. **Solr 8 and above**, for the `uniqueBlock` count.
+
+```ruby
+# The names of the milestones Ana owns on active projects, each with its number of projects
+search = Project.search do
+  with :status, 'active'
+  child_facet :milestones, :name, :matches => 'des.*' do
+    with :owner_names, 'ana'
+  end
+end
+search.facet(:name).rows.map { |row| [row.value, row.count] } # => [["design", 1]]
+```
+
 #### Schema
 
 The schema needs a `_root_` field with the same type as `id`. The bundled configset has one.
