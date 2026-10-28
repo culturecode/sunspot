@@ -334,6 +334,68 @@ describe 'nested documents' do
     end
   end
 
+  describe 'faceting on a child field' do
+    def json_facet
+      JSON.parse(connection.searches.last['json.facet'])
+    end
+
+    it 'facets on the children of the matching parents, ranked by the number of parents' do
+      session.search(Project) { child_facet(:milestones, :name) { with :owner_names, 'ana' } }
+      expect(json_facet).to eq('name' => {
+        'type' => 'terms', 'field' => 'name_s', 'sort' => { 'distinct' => 'desc' },
+        'domain' => { 'blockChildren' => roots, 'filter' => ['(_sunspot_nested_path_s:"Project.milestones" AND owner_names_sm:ana)'] },
+        'facet' => { 'distinct' => 'uniqueBlock(_root_)' }
+      })
+    end
+
+    it 'is keyed by its :name' do
+      session.search(Project) { child_facet(:milestones, :name, :name => :milestone_name) }
+      expect(json_facet.keys).to eq(['milestone_name'])
+    end
+
+    it 'ranks by the number of parents when sorted by count, and keeps an index sort' do
+      session.search(Project) { child_facet(:milestones, :name, :sort => :count, :sort_type => 'asc') }
+      expect(json_facet['name']['sort']).to eq('distinct' => 'asc')
+
+      session.search(Project) { child_facet(:milestones, :name, :sort => :index, :sort_type => 'asc') }
+      expect(json_facet['name']['sort']).to eq('index' => 'asc')
+    end
+
+    it 'leaves a minimum count to the rows, since Solr would apply it to the children' do
+      session.search(Project) { child_facet(:milestones, :name, :minimum_count => 2) }
+      expect(json_facet['name']).not_to have_key('mincount')
+    end
+
+    it 'filters the children by :matches, escaping a slash' do
+      session.search(Project) { child_facet(:milestones, :name, :matches => 'a/b.*') }
+      expect(json_facet['name']['domain']['filter'].last).to eq('name_s:/a\/b.*/')
+    end
+
+    it 'reads the children of every searched class that declares the association' do
+      session.search(Project, Program) { child_facet(:milestones, :name) }
+      expect(json_facet['name']['domain']['filter'].first).to include('Project.milestones', 'Program.milestones')
+    end
+
+    it 'raises for an option it does not support' do
+      expect { session.search(Project) { child_facet(:milestones, :name, :range => [1, 10]) } }.to raise_error(ArgumentError, /:range/)
+    end
+
+    it 'raises for :matches on a field that is not a string, or given anything but a String' do
+      expect { session.search(Project) { child_facet(:milestones, :started_at, :matches => '2026.*') } }.to raise_error(ArgumentError, /string field/)
+      expect { session.search(Project) { child_facet(:milestones, :name, :matches => /des/) } }.to raise_error(ArgumentError, /String/)
+    end
+
+    it 'raises for a name the search already has a facet by' do
+      expect { session.search(Project) { json_facet :name; child_facet(:milestones, :name) } }.to raise_error(ArgumentError, /:name of its own/)
+    end
+  end
+
+  describe 'escaping a Lucene regular expression' do
+    it 'escapes every character the syntax reserves, but a slash' do
+      expect(Sunspot::Util.escape_lucene_regexp('a.b (c) "d" <e> f&g ~h @i #j \\ k/l')).to eq('a\.b \(c\) \"d\" \<e\> f\&g \~h \@i \#j \\\\ k/l')
+    end
+  end
+
   describe 'removal' do
     it 'removes the whole block when removing a parent' do
       project = Project.new

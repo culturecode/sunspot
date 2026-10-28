@@ -106,7 +106,7 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
   end
 
   describe 'child_facet' do
-    before { skip_before_solr 8, 'The parent count needs uniqueBlock, which Solr 7 and earlier lack' }
+    before { skip_before_solr 8, 'The parent count needs uniqueBlock, which Solr 7.7 has and 7.3 lacks, and skip_before_solr compares major versions' }
 
     def facet_rows(&block)
       Sunspot.search(Project, &block).facet(:name).rows.map { |row| [row.value, row.count] }
@@ -130,8 +130,41 @@ describe 'nested documents', :if => defined?(RSolr::Document::CHILD_DOCUMENT_KEY
       expect(facet_rows { child_facet(:milestones, :name, :matches => 'des.*') }).to eq([['design', 2]])
     end
 
-    it 'counts a regular expression containing a slash' do
-      expect(facet_rows { child_facet(:milestones, :name, :matches => 'a/b|design') }).to eq([['design', 2]])
+    it 'matches a value containing a slash' do
+      Sunspot.index!(Project.new(:name => 'slashed', :status => 'active', :milestones => [milestone('a/b', Time.utc(2026, 3, 1))]))
+
+      expect(facet_rows { child_facet(:milestones, :name, :matches => 'a/b') }).to eq([['a/b', 1]])
+    end
+
+    it 'ranks the values by their number of parents, so a limit keeps the values most parents have' do
+      Sunspot.index!(Project.new(:name => 'reviewed thrice', :status => 'active', :milestones => [milestone('review', Time.utc(2026, 3, 1)), milestone('review', Time.utc(2026, 4, 1)), milestone('review', Time.utc(2026, 5, 1))]))
+
+      expect(facet_rows { child_facet(:milestones, :name, :limit => 1) }).to eq([['design', 2]])
+    end
+
+    it 'applies a minimum count to the number of parents' do
+      Sunspot.index!(Project.new(:name => 'built thrice', :status => 'active', :milestones => [milestone('build', Time.utc(2026, 3, 1)), milestone('build', Time.utc(2026, 4, 1)), milestone('build', Time.utc(2026, 5, 1))]))
+
+      expect(facet_rows { child_facet(:milestones, :name, :minimum_count => 3) }).to eq([])
+      expect(facet_rows { child_facet(:milestones, :name, :minimum_count => 2) }).to match_array([['design', 2], ['build', 2]])
+    end
+
+    it 'keeps two facets on the same field apart by their :name' do
+      search = Sunspot.search(Project) do
+        child_facet(:milestones, :name, :name => :anas) { with :owner_names, 'ana' }
+        child_facet(:milestones, :name, :name => :bens) { with :owner_names, 'ben' }
+      end
+
+      expect(search.facet(:anas).rows.map { |row| [row.value, row.count] }).to match_array([['design', 1], ['build', 1]])
+      expect(search.facet(:bens).rows.map { |row| [row.value, row.count] }).to eq([['design', 1]])
+    end
+
+    it 'counts the other values of a multiple-value field on a child that matches' do
+      Sunspot.index!(Project.new(:name => 'shared', :status => 'active', :milestones => [milestone('plan', Time.utc(2026, 3, 1), :owner_names => %w(cy dee))]))
+
+      rows = Sunspot.search(Project) { child_facet(:milestones, :owner_names, :matches => 'd.*') }.facet(:owner_names).rows
+
+      expect(rows.map(&:value)).to match_array(['cy', 'dee'])
     end
   end
 

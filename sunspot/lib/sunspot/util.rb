@@ -188,6 +188,15 @@ module Sunspot
         RSolr.solr_escape(value).gsub(/([\s\.])/, '\\\\\1')
       end
 
+      #
+      # Escapes text for a Lucene regular expression, such as child_facet's
+      # +:matches+, so it matches literally. Leaves a slash, which child_facet
+      # escapes itself.
+      #
+      def escape_lucene_regexp(value)
+        value.to_s.gsub(/[.?+*|{}\[\]()"\\#@&<>~^$]/) {|char| "\\#{char}" }
+      end
+
       def parse_json_facet(field_name, options, setup)
         field = setup.field(field_name)
         if options[:range] || options[:time_range]

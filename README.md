@@ -1090,7 +1090,11 @@ end
 
 A parent with several such children sorts by the smallest value ascending and the largest descending. `:score => :min`, `:max`, `:avg` or `:total` combines them another way. Solr compares the values as floats, so times less than about two minutes apart, and integers above 2**24, can tie. Solr also reads a negative value as zero, so times before 1970 all sort as 1970, and negative numbers as zero. A later `order_by` breaks the tie.
 
-`child_facet` facets on a field of the children, counting the parents that have each value rather than the children. It counts only the children of parents matching the search, and only those meeting the block's restrictions. `:matches` keeps only the children whose value matches a Lucene regular expression, as a whole. It takes the other options of `json_facet`, and is read with `facet`, by the field's name or by `:name`. **Solr 8 and above**, for the `uniqueBlock` count.
+#### Faceting on a child field
+
+**Solr 7.7 and above**, for the `uniqueBlock` count: Solr 7.7 has it and 7.3 doesn't. The specs run it on Solr 8 and above.
+
+`child_facet` facets on a field of the children, counting the parents that have each value rather than the children, and ranking the values by that count, so `:limit` keeps the values most parents have. It counts only the children of parents matching the search, and only those meeting the block's restrictions, the same restrictions `with_child` takes. A `with_child` on the search doesn't restrict the facet's children, so repeat any condition they need in the block.
 
 ```ruby
 # The names of the milestones Ana owns on active projects, each with its number of projects
@@ -1102,6 +1106,10 @@ search = Project.search do
 end
 search.facet(:name).rows.map { |row| [row.value, row.count] } # => [["design", 1]]
 ```
+
+* The facet is read with `facet`, by the field's name or by `:name`. A search with another facet of the same name raises `ArgumentError` unless `child_facet` has a `:name` of its own.
+* Options: `:limit`, `:offset`, `:prefix`, `:missing`, `:all_buckets`, `:sort` (`:count`, the default, which ranks by the number of parents, or `:index`) with `:sort_type`, `:minimum_count`, counted in parents, and `:matches`. Any other option raises `ArgumentError`.
+* `:matches` is a Lucene regular expression, not a Ruby one, matched against the whole value of a string field, case-sensitively. `Sunspot::Util.escape_lucene_regexp` escapes text to match it literally, e.g. text a user typed. On a multiple-value field, `:matches` selects children, so a matching child's other values are counted too.
 
 #### Schema
 
