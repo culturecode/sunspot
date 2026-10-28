@@ -268,6 +268,12 @@ module Sunspot
         add_facet(name, FieldJsonFacet.new(field, self, options))
       end
 
+      def add_child_json_facet(field, options = {}) #:nodoc:
+        name = (options[:name] || field.name).to_sym
+        raise ArgumentError, "The search already has a facet named #{name}; give child_facet a :name of its own" if @facets_by_name.key?(name)
+        add_facet(name, ChildFieldJsonFacet.new(field, self, options))
+      end
+
       def highlights_for(doc) #:nodoc:
         if @solr_result['highlighting']
           @solr_result['highlighting'][doc['id']]
